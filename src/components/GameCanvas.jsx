@@ -61,11 +61,12 @@ export default function GameCanvas(props) {
   const [currentLevel, setCurrentLevel] = createSignal(1);
   const [finalScore, setFinalScore] = createSignal(0);
 
-  // 가상 컨트롤러 입력 상태
-  let virtualInput = { left: false, right: false, up: false, down: false };
+  // [수정] 가상 컨트롤러 상태를 벡터(Vector) 형태로 변경
+  // x, y: 이동 방향 (-1.0 ~ 1.0), active: 터치 중 여부
+  let virtualInput = { x: 0, y: 0, active: false };
 
   let gameContainer;
-  let dPadContainer; // D-Pad DOM 참조
+  let dPadContainer;
   let game = null;
 
   // --- 핸들러 ---
@@ -98,15 +99,15 @@ export default function GameCanvas(props) {
     }
   };
 
-  // [모바일] 좌표 기반 D-Pad 터치 핸들러 (대각선 지원)
+  // [수정] 32방향 벡터 기반 터치 핸들러
   const handleDpadTouch = (e) => {
     if (e.cancelable) e.preventDefault();
     e.stopPropagation();
 
-    // 터치 종료/취소 시 입력 초기화
+    // 터치 종료 시
     if (e.type === 'touchend' || e.type === 'touchcancel') {
-        if (virtualInput.left || virtualInput.right || virtualInput.up || virtualInput.down) {
-            virtualInput = { left: false, right: false, up: false, down: false };
+        if (virtualInput.active) {
+            virtualInput = { x: 0, y: 0, active: false };
             syncInputToPhaser();
         }
         return;
@@ -115,37 +116,38 @@ export default function GameCanvas(props) {
     const touch = e.touches[0];
     if (!touch || !dPadContainer) return;
 
-    // D-Pad 중심점 계산
     const rect = dPadContainer.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
 
-    // 중심으로부터 거리 (델타)
     const dx = touch.clientX - centerX;
     const dy = touch.clientY - centerY;
 
-    // 감도 (Deadzone)
-    const threshold = 20;
-
-    const nextInput = { left: false, right: false, up: false, down: false };
-
-    // X축 판정
-    if (dx < -threshold) nextInput.left = true;
-    else if (dx > threshold) nextInput.right = true;
-
-    // Y축 판정 (독립적 -> 대각선 가능)
-    if (dy < -threshold) nextInput.up = true;
-    else if (dy > threshold) nextInput.down = true;
-
-    // 상태 변경 시에만 업데이트
-    if (virtualInput.left !== nextInput.left || 
-        virtualInput.right !== nextInput.right || 
-        virtualInput.up !== nextInput.up || 
-        virtualInput.down !== nextInput.down) {
-        
-        virtualInput = nextInput;
-        syncInputToPhaser();
+    // 데드존 (중심에서 10px 이내 무시)
+    if (dx * dx + dy * dy < 100) {
+        if (virtualInput.active) {
+            virtualInput = { x: 0, y: 0, active: false };
+            syncInputToPhaser();
+        }
+        return;
     }
+
+    // 1. 각도 계산 (라디안)
+    const angle = Math.atan2(dy, dx);
+
+    // 2. 32방향 스냅 (Snap)
+    // 360도(2*PI)를 32로 나눈 간격
+    const sector = (Math.PI * 2) / 32; 
+    // 현재 각도를 가장 가까운 32분할 각도로 반올림
+    const snappedAngle = Math.round(angle / sector) * sector;
+
+    // 3. 이동 벡터 계산
+    const vx = Math.cos(snappedAngle);
+    const vy = Math.sin(snappedAngle);
+
+    // 상태 업데이트
+    virtualInput = { x: vx, y: vy, active: true };
+    syncInputToPhaser();
   };
 
   const syncInputToPhaser = () => {
@@ -178,12 +180,7 @@ export default function GameCanvas(props) {
         default: 'arcade',
         arcade: { gravity: { x: 0, y: 0 }, debug: false }
       },
-      scene: { 
-        key: 'MainScene',
-        preload, 
-        create, 
-        update 
-      }
+      scene: { key: 'MainScene', preload, create, update }
     };
 
     game = new Phaser.Game(config);
@@ -267,7 +264,7 @@ export default function GameCanvas(props) {
     const finalPlayerScale = 0.5 * (isMobile ? 0.7 : 1.0);
     player.setScale(finalPlayerScale);
 
-    // [최적화 1] UI 객체 생성 및 그리기 함수 정의
+    // UI 그래픽스
     const energyBarBg = this.add.graphics();
     const expBarBg = this.add.graphics();
     const energyBarFill = this.add.graphics();
@@ -286,12 +283,12 @@ export default function GameCanvas(props) {
     shockwaveCooldownText.setVisible(false);
     this.data.set('shockwaveCooldownText', shockwaveCooldownText);
 
+    // UI 그리기 함수
     const drawUI = () => {
         const barX = player.x - (ENERGY_BAR_WIDTH / 2);
         const energyY = player.y - (player.displayHeight / 2) - 20;
         const expY = energyY + ENERGY_BAR_HEIGHT + 2;
 
-        // 에너지
         const currentEnergy = player.getData('energy');
         const maxEnergy = player.getData('maxEnergy');
         const energyPercent = Phaser.Math.Clamp(currentEnergy / maxEnergy, 0, 1);
@@ -304,7 +301,6 @@ export default function GameCanvas(props) {
         energyBarFill.fillStyle(0x00ff00, 1);
         energyBarFill.fillRect(barX, energyY, ENERGY_BAR_WIDTH * energyPercent, ENERGY_BAR_HEIGHT);
 
-        // 경험치
         const currentExp = player.getData('experience');
         const currentLvl = player.getData('level');
         const nextLvlExp = levelExperience[String(currentLvl + 1)] || 999999;
@@ -328,7 +324,6 @@ export default function GameCanvas(props) {
     this.data.set('drawUI', drawUI);
     drawUI(); 
     
-    // 이벤트 리스너 등록
     player.on('changedata-energy', drawUI);
     player.on('changedata-experience', drawUI);
     player.on('changedata-level', drawUI);
@@ -344,7 +339,7 @@ export default function GameCanvas(props) {
     this.data.set('spaceKey', this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE));
     
     // 데이터 초기화
-    this.data.set('virtualInput', { left: false, right: false, up: false, down: false });
+    this.data.set('virtualInput', { x: 0, y: 0, active: false });
     this.data.set('lastChunkUpdate', 0);
     this.data.set('skills', skills()); 
     
@@ -382,7 +377,8 @@ export default function GameCanvas(props) {
     
     const player = this.data.get('player');
     const cursors = this.data.get('cursors');
-    const vInput = this.data.get('virtualInput') || { left: false, right: false, up: false, down: false };
+    // 가상 입력 확인 (벡터)
+    const vInput = this.data.get('virtualInput') || { x: 0, y: 0, active: false };
 
     if (!player || !cursors) return;
 
@@ -422,7 +418,7 @@ export default function GameCanvas(props) {
             const isMobile = this.data.get('isMobile');
             
             if (isMobile) {
-                // D-Pad 이외의 영역을 멀티터치로 눌렀을 때
+                // D-Pad 외의 영역 멀티터치
                 const p1 = this.input.pointer1.isDown;
                 const p2 = this.input.pointer2.isDown;
                 const wasTwoFinger = this.data.get('wasTwoFingerDown');
@@ -453,7 +449,7 @@ export default function GameCanvas(props) {
         if (shockwaveCooldownText) shockwaveCooldownText.setVisible(false);
     }
 
-    // --- 플레이어 이동 ---
+    // --- [이동 로직 개선] 키보드 + 32방향 가상 조이스틱 통합 ---
     let speed = BASE_PLAYER_SPEED;
     if (skills && skills.includes(21)) speed *= 1.1;
 
@@ -461,36 +457,47 @@ export default function GameCanvas(props) {
     const isKnockedBack = this.data.get('isKnockedBack');
 
     if (!isKnockedBack) {
-        const left = cursors.left.isDown || vInput.left;
-        const right = cursors.right.isDown || vInput.right;
-        const up = cursors.up.isDown || vInput.up;
-        const down = cursors.down.isDown || vInput.down;
-        const hasKeyInput = left || right || up || down;
+        let moveX = 0;
+        let moveY = 0;
 
-        if (hasKeyInput) {
-            player.setVelocity(0);
-            if (left) { player.setVelocityX(-speed); player.setFlipX(false); isMoving = true; }
-            else if (right) { player.setVelocityX(speed); player.setFlipX(true); isMoving = true; }
-            
-            if (up) { player.setVelocityY(-speed); isMoving = true; }
-            else if (down) { player.setVelocityY(speed); isMoving = true; }
+        // 1. 가상 조이스틱 (우선순위)
+        if (vInput.active) {
+            moveX = vInput.x;
+            moveY = vInput.y;
+        } else {
+            // 2. 키보드 입력 -> 벡터 변환
+            if (cursors.left.isDown) moveX -= 1;
+            if (cursors.right.isDown) moveX += 1;
+            if (cursors.up.isDown) moveY -= 1;
+            if (cursors.down.isDown) moveY += 1;
 
-            if (isMoving) player.body.velocity.normalize().scale(speed);
-        } else if (this.input.activePointer.isDown) {
-            // D-Pad 입력 없을 때만 터치 이동
-            const targetX = this.input.activePointer.worldX;
-            const targetY = this.input.activePointer.worldY;
-            
-            if (!vInput.left && !vInput.right && !vInput.up && !vInput.down) {
-                this.physics.moveTo(player, targetX, targetY, speed);
-                if (Phaser.Math.Distance.Between(player.x, player.y, targetX, targetY) < 10) {
-                    player.body.reset(targetX, targetY);
-                    isMoving = false;
-                } else {
-                    isMoving = true;
-                    player.setFlipX(targetX > player.x);
-                }
+            // 정규화 (대각선 속도 보정)
+            if (moveX !== 0 || moveY !== 0) {
+                const len = Math.sqrt(moveX * moveX + moveY * moveY);
+                moveX /= len;
+                moveY /= len;
             }
+        }
+
+        // 3. 마우스/터치 (화면 직접 터치)
+        if (moveX === 0 && moveY === 0 && this.input.activePointer.isDown) {
+             // D-Pad를 쓰고 있지 않을 때만
+             const targetX = this.input.activePointer.worldX;
+             const targetY = this.input.activePointer.worldY;
+             
+             // 거리가 가까우면 멈춤
+             if (Phaser.Math.Distance.Between(player.x, player.y, targetX, targetY) > 10) {
+                 this.physics.moveTo(player, targetX, targetY, speed);
+                 isMoving = true;
+                 player.setFlipX(targetX > player.x);
+             } else {
+                 player.setVelocity(0);
+             }
+        } else if (moveX !== 0 || moveY !== 0) {
+            // 키보드/조이스틱 이동 적용
+            player.setVelocity(moveX * speed, moveY * speed);
+            isMoving = true;
+            player.setFlipX(moveX > 0); // 우측 이동 시 반전
         } else {
             player.setVelocity(0);
         }
@@ -572,7 +579,7 @@ export default function GameCanvas(props) {
         }
     });
 
-    // [최적화 2] 청크 업데이트 쓰로틀링 (0.2s)
+    // [최적화 2] 청크 업데이트 쓰로틀링
     const lastChunkUpdate = this.data.get('lastChunkUpdate');
     if (time - lastChunkUpdate > 200) { 
         generateSurroundingChunks.call(this, player.x, player.y);
@@ -580,7 +587,7 @@ export default function GameCanvas(props) {
     }
   }
 
-  // --- Helper Functions ---
+  // --- Helper Functions (생략 없이 포함) ---
   function spawnMouseVillain() {
     if (this.data.get('gameOver')) return;
     const mice = this.data.get('mice');
@@ -874,7 +881,6 @@ export default function GameCanvas(props) {
             onTouchEnd={handleDpadTouch}
             onTouchCancel={handleDpadTouch}
         >
-            {/* 버튼은 시각적 역할만 담당 (active 클래스는 CSS나 JS로 제어 가능) */}
             <div className={`d-pad-btn d-pad-up`}>▲</div>
             <div className={`d-pad-btn d-pad-left`}>◀</div>
             <div className={`d-pad-btn d-pad-right`}>▶</div>
