@@ -19,40 +19,75 @@ export default class MainScene extends Phaser.Scene {
         this.load.spritesheet('butterfly_sprite_3frame', '/images/butterfly_sprite_3frame.png', { frameWidth: 100, frameHeight: 83 });
         this.load.image('cat_cry', '/images/cat_cry.png');
         this.load.image('cat_haak', '/images/cat_haak.png');
+
+        this.load.image('tileset_img', '/assets/tilesets/TX Tileset Grass.png'); // 실제 파일 경로
+        this.load.tilemapTiledJSON('stage1_map', '/assets/maps/stage1.json');
     }
 
     create() {
         this.data.set('gameOver', false);
         this.physics.resume();
 
-        // 타일 색상 초기화
-        if (Config.TILE_COLORS.length === 0) {
-            for (let i = 0; i < 10; i++) {
-                const hue = Phaser.Math.FloatBetween(0.25, 0.40);
-                const saturation = Phaser.Math.FloatBetween(0.1, 0.3);
-                const lightness = Phaser.Math.FloatBetween(0.3, 0.4);
-                Config.TILE_COLORS.push(Phaser.Display.Color.HSLToColor(hue, saturation, lightness).color);
-            }
-        }
+        // --- [변경 시작] Tiled 맵 생성 ---
+    
+        // 1. 맵 불러오기 (preload에서 정한 키)
+        const map = this.make.tilemap({ key: 'stage1_map' });
+        console.log("Map created:", map);
 
-        this.cameras.main.setBackgroundColor('#2d4c1e');
-        this.physics.world.setBounds(0, 0, Config.WORLD_BOUNDS_SIZE, Config.WORLD_BOUNDS_SIZE);
+        // 2. 타일셋 이미지 연결 
+        // 첫 번째 인자: Tiled에서 정한 타일셋 이름 (Step 2-2의 Name)
+        // 두 번째 인자: preload에서 로드한 이미지 키
+        const tileset = map.addTilesetImage('tileser_nature', 'tileset_img');
 
-        // 청크 텍스처 생성
-        const chunkVariations = 4;
-        const tempRT = this.make.renderTexture({ x: 0, y: 0, width: Config.CHUNK_SIZE_PX + 2, height: Config.CHUNK_SIZE_PX + 2, add: false }, false);
-        for (let v = 0; v < chunkVariations; v++) {
-            tempRT.clear();
-            for (let x = 0; x < Config.CHUNK_DIMENSIONS; x++) {
-                for (let y = 0; y < Config.CHUNK_DIMENSIONS; y++) {
-                    const colorIndex = Phaser.Math.Between(0, Config.TILE_COLORS.length - 1);
-                    const color = Config.TILE_COLORS[colorIndex];
-                    tempRT.fill(color, 1, x * Config.TILE_SIZE, y * Config.TILE_SIZE, Config.TILE_SIZE + 1, Config.TILE_SIZE + 1);
-                }
-            }
-            tempRT.saveTexture(`chunk_texture_${v}`);
+        if (!tileset) {
+            console.error(`❌ 타일셋을 찾을 수 없습니다! Tiled에서의 이름이 '${tilesetNameInTiled}'가 맞는지 확인하세요.`);
+            console.log("사용 가능한 타일셋 목록:", map.tilesets.map(t => t.name));
+            return; // 에러 방지를 위해 중단
         }
-        tempRT.destroy();
+        console.log("Tileset loaded:", tileset);
+
+        // 3. 레이어 생성 (Tiled의 레이어 이름과 같아야 함)
+        // createLayer(레이어이름, 타일셋, x, y)
+        const groundLayer = map.createLayer('Ground', tileset, 0, 0);
+        const wallLayer = map.createLayer('Walls', tileset, 0, 0);
+
+        // 4. 충돌 설정 (Walls 레이어에서 타일이 있는 곳은 충돌 처리)
+        // Tiled에서 'collides: true' 속성을 줬다면 setCollisionByProperty 사용 가능
+        // 여기서는 간단하게 "Walls 레이어의 모든 타일과 충돌"로 설정
+        wallLayer.setCollisionByExclusion([-1]); 
+
+        // 5. 월드 크기를 맵 크기에 맞춤
+        this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+        this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+
+        // // 타일 색상 초기화
+        // if (Config.TILE_COLORS.length === 0) {
+        //     for (let i = 0; i < 10; i++) {
+        //         const hue = Phaser.Math.FloatBetween(0.25, 0.40);
+        //         const saturation = Phaser.Math.FloatBetween(0.1, 0.3);
+        //         const lightness = Phaser.Math.FloatBetween(0.3, 0.4);
+        //         Config.TILE_COLORS.push(Phaser.Display.Color.HSLToColor(hue, saturation, lightness).color);
+        //     }
+        // }
+
+        // this.cameras.main.setBackgroundColor('#2d4c1e');
+        // this.physics.world.setBounds(0, 0, Config.WORLD_BOUNDS_SIZE, Config.WORLD_BOUNDS_SIZE);
+
+        // // 청크 텍스처 생성
+        // const chunkVariations = 4;
+        // const tempRT = this.make.renderTexture({ x: 0, y: 0, width: Config.CHUNK_SIZE_PX + 2, height: Config.CHUNK_SIZE_PX + 2, add: false }, false);
+        // for (let v = 0; v < chunkVariations; v++) {
+        //     tempRT.clear();
+        //     for (let x = 0; x < Config.CHUNK_DIMENSIONS; x++) {
+        //         for (let y = 0; y < Config.CHUNK_DIMENSIONS; y++) {
+        //             const colorIndex = Phaser.Math.Between(0, Config.TILE_COLORS.length - 1);
+        //             const color = Config.TILE_COLORS[colorIndex];
+        //             tempRT.fill(color, 1, x * Config.TILE_SIZE, y * Config.TILE_SIZE, Config.TILE_SIZE + 1, Config.TILE_SIZE + 1);
+        //         }
+        //     }
+        //     tempRT.saveTexture(`chunk_texture_${v}`);
+        // }
+        // tempRT.destroy();
 
         // 애니메이션 생성
         this.anims.create({ key: 'cat_walk', frames: this.anims.generateFrameNumbers('player_sprite', { start: 0, end: 2 }), frameRate: 10, repeat: -1 });
@@ -63,6 +98,7 @@ export default class MainScene extends Phaser.Scene {
 
         // 플레이어 생성
         const player = this.physics.add.sprite(this.game.config.width / 2, this.game.config.height / 2, 'player_sprite');
+        this.physics.add.collider(player, wallLayer);
         player.setDrag(500);
         player.setDepth(1);
         
@@ -146,8 +182,8 @@ export default class MainScene extends Phaser.Scene {
         this.data.set('dogs', this.physics.add.group());
         this.data.set('fishItems', this.physics.add.group());
         this.data.set('butterflies', this.physics.add.group());
-        this.data.set('generatedChunks', new Set());
-        this.data.set('chunkGroup', this.add.group());
+        // this.data.set('generatedChunks', new Set());
+        // this.data.set('chunkGroup', this.add.group());
         this.data.set('cursors', this.input.keyboard.createCursorKeys());
         this.data.set('spaceKey', this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE));
         
@@ -157,13 +193,15 @@ export default class MainScene extends Phaser.Scene {
 
         this.input.addPointer(2); 
         this.cameras.main.startFollow(player, true, 0.05, 0.05);
-        this.generateSurroundingChunks(player.x, player.y);
+        // this.generateSurroundingChunks(player.x, player.y);
 
         // -----------------------------------------------------
         // [충돌 및 상호작용 설정]
         // -----------------------------------------------------
         const mice = this.data.get('mice');
         const dogs = this.data.get('dogs');
+        this.physics.add.collider(mice, wallLayer); // 적들도 벽 통과 못하게
+        this.physics.add.collider(dogs, wallLayer);
         const fishItems = this.data.get('fishItems');
         const butterflies = this.data.get('butterflies');
 
@@ -374,11 +412,11 @@ export default class MainScene extends Phaser.Scene {
             }
         });
 
-        const lastChunkUpdate = this.data.get('lastChunkUpdate');
-        if (time - lastChunkUpdate > 200) { 
-            this.generateSurroundingChunks(player.x, player.y);
-            this.data.set('lastChunkUpdate', time);
-        }
+        // const lastChunkUpdate = this.data.get('lastChunkUpdate');
+        // if (time - lastChunkUpdate > 200) { 
+        //     this.generateSurroundingChunks(player.x, player.y);
+        //     this.data.set('lastChunkUpdate', time);
+        // }
     }
 
     // --- Helper Methods ---
@@ -610,60 +648,60 @@ export default class MainScene extends Phaser.Scene {
         this.time.removeAllEvents();
     }
 
-    generateTileChunk(chunkX, chunkY) {
-        const generatedChunks = this.data.get('generatedChunks');
-        const chunkKey = `${chunkX}_${chunkY}`;
-        if (generatedChunks.has(chunkKey)) return;
-        generatedChunks.add(chunkKey);
+    // generateTileChunk(chunkX, chunkY) {
+    //     const generatedChunks = this.data.get('generatedChunks');
+    //     const chunkKey = `${chunkX}_${chunkY}`;
+    //     if (generatedChunks.has(chunkKey)) return;
+    //     generatedChunks.add(chunkKey);
 
-        const startWorldX = chunkX * Config.CHUNK_SIZE_PX;
-        const startWorldY = chunkY * Config.CHUNK_SIZE_PX;
-        const randomTextureKey = `chunk_texture_${Phaser.Math.Between(0, 3)}`;
+    //     const startWorldX = chunkX * Config.CHUNK_SIZE_PX;
+    //     const startWorldY = chunkY * Config.CHUNK_SIZE_PX;
+    //     const randomTextureKey = `chunk_texture_${Phaser.Math.Between(0, 3)}`;
 
-        const chunkGroup = this.data.get('chunkGroup');
-        let chunkImage = chunkGroup.getFirstDead(false);
+    //     const chunkGroup = this.data.get('chunkGroup');
+    //     let chunkImage = chunkGroup.getFirstDead(false);
 
-        if (!chunkImage) {
-            chunkImage = this.add.image(startWorldX, startWorldY, randomTextureKey);
-            chunkImage.setOrigin(0, 0);
-            chunkImage.setDepth(0);
-            chunkGroup.add(chunkImage);
-        } else {
-            chunkImage.setTexture(randomTextureKey);
-            chunkImage.setPosition(startWorldX, startWorldY);
-            chunkImage.setActive(true);
-            chunkImage.setVisible(true);
-        }
+    //     if (!chunkImage) {
+    //         chunkImage = this.add.image(startWorldX, startWorldY, randomTextureKey);
+    //         chunkImage.setOrigin(0, 0);
+    //         chunkImage.setDepth(0);
+    //         chunkGroup.add(chunkImage);
+    //     } else {
+    //         chunkImage.setTexture(randomTextureKey);
+    //         chunkImage.setPosition(startWorldX, startWorldY);
+    //         chunkImage.setActive(true);
+    //         chunkImage.setVisible(true);
+    //     }
         
-        chunkImage.setData('chunkKey', chunkKey);
-    }
+    //     chunkImage.setData('chunkKey', chunkKey);
+    // }
 
-    generateSurroundingChunks(worldX, worldY) {
-        const currentChunkX = Math.floor(worldX / Config.CHUNK_SIZE_PX);
-        const currentChunkY = Math.floor(worldY / Config.CHUNK_SIZE_PX);
-        for (let i = currentChunkX - Config.GENERATION_BUFFER_CHUNKS; i <= currentChunkX + Config.GENERATION_BUFFER_CHUNKS; i++) {
-            for (let j = currentChunkY - Config.GENERATION_BUFFER_CHUNKS; j <= currentChunkY + Config.GENERATION_BUFFER_CHUNKS; j++) {
-                this.generateTileChunk(i, j);
-            }
-        }
-        this.cleanupFarChunks(worldX, worldY);
-    }
+    // generateSurroundingChunks(worldX, worldY) {
+    //     const currentChunkX = Math.floor(worldX / Config.CHUNK_SIZE_PX);
+    //     const currentChunkY = Math.floor(worldY / Config.CHUNK_SIZE_PX);
+    //     for (let i = currentChunkX - Config.GENERATION_BUFFER_CHUNKS; i <= currentChunkX + Config.GENERATION_BUFFER_CHUNKS; i++) {
+    //         for (let j = currentChunkY - Config.GENERATION_BUFFER_CHUNKS; j <= currentChunkY + Config.GENERATION_BUFFER_CHUNKS; j++) {
+    //             this.generateTileChunk(i, j);
+    //         }
+    //     }
+    //     this.cleanupFarChunks(worldX, worldY);
+    // }
 
-    cleanupFarChunks(playerX, playerY) {
-        const chunkGroup = this.data.get('chunkGroup');
-        const generatedChunks = this.data.get('generatedChunks');
-        const cleanupDistance = Config.CHUNK_SIZE_PX * (Config.GENERATION_BUFFER_CHUNKS + 3);
-        const cleanupDistanceSq = cleanupDistance * cleanupDistance; 
+    // cleanupFarChunks(playerX, playerY) {
+    //     const chunkGroup = this.data.get('chunkGroup');
+    //     const generatedChunks = this.data.get('generatedChunks');
+    //     const cleanupDistance = Config.CHUNK_SIZE_PX * (Config.GENERATION_BUFFER_CHUNKS + 3);
+    //     const cleanupDistanceSq = cleanupDistance * cleanupDistance; 
 
-        chunkGroup.getChildren().forEach(child => {
-            if (!child.active) return; 
+    //     chunkGroup.getChildren().forEach(child => {
+    //         if (!child.active) return; 
 
-            const distSq = Phaser.Math.Distance.Squared(playerX, playerY, child.x + Config.CHUNK_SIZE_PX / 2, child.y + Config.CHUNK_SIZE_PX / 2);
-            if (distSq > cleanupDistanceSq) {
-                const key = child.getData('chunkKey');
-                if (key) generatedChunks.delete(key);
-                chunkGroup.killAndHide(child); 
-            }
-        });
-    }
+    //         const distSq = Phaser.Math.Distance.Squared(playerX, playerY, child.x + Config.CHUNK_SIZE_PX / 2, child.y + Config.CHUNK_SIZE_PX / 2);
+    //         if (distSq > cleanupDistanceSq) {
+    //             const key = child.getData('chunkKey');
+    //             if (key) generatedChunks.delete(key);
+    //             chunkGroup.killAndHide(child); 
+    //         }
+    //     });
+    // }
 }
