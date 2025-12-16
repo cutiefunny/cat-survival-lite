@@ -151,8 +151,6 @@ export default class MainScene extends Phaser.Scene {
         this.data.set('cursors', this.input.keyboard.createCursorKeys());
         this.data.set('spaceKey', this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE));
         
-        // SolidJS에서 초기 스킬 데이터가 아직 안 넘어왔을 수 있으므로 빈 배열로 초기화
-        // GameCanvas의 createEffect가 곧 업데이트해줍니다.
         if (!this.data.has('skills')) {
              this.data.set('skills', []);
         }
@@ -161,13 +159,35 @@ export default class MainScene extends Phaser.Scene {
         this.cameras.main.startFollow(player, true, 0.05, 0.05);
         this.generateSurroundingChunks(player.x, player.y);
 
-        this.physics.add.collider(player, this.data.get('mice'), this.hitMouse, null, this);
-        this.physics.add.collider(player, this.data.get('dogs'), this.hitDog, null, this);
-        this.physics.add.collider(this.data.get('mice'), this.data.get('mice'));
-        this.physics.add.collider(this.data.get('dogs'), this.data.get('dogs'));
-        this.physics.add.overlap(player, this.data.get('fishItems'), this.collectFish, null, this);
-        this.physics.add.overlap(player, this.data.get('butterflies'), this.collectButterfly, null, this);
+        // -----------------------------------------------------
+        // [충돌 및 상호작용 설정]
+        // -----------------------------------------------------
+        const mice = this.data.get('mice');
+        const dogs = this.data.get('dogs');
+        const fishItems = this.data.get('fishItems');
+        const butterflies = this.data.get('butterflies');
+
+        // 1. 플레이어 vs 적 (충돌 시 데미지)
+        this.physics.add.collider(player, mice, this.hitMouse, null, this);
+        this.physics.add.collider(player, dogs, this.hitDog, null, this);
         
+        // 2. 적끼리 충돌 (겹침 방지)
+        this.physics.add.collider(mice, mice);
+        this.physics.add.collider(dogs, dogs);
+        this.physics.add.collider(dogs, mice); // [추가] 강아지와 쥐도 서로 충돌
+
+        // 3. 적 vs 아이템 (물리적 충돌 적용)
+        // 아이템은 spawnEntity에서 setImmovable(true) 처리되어 밀리지 않음
+        this.physics.add.collider(dogs, fishItems);
+        this.physics.add.collider(mice, fishItems);
+        this.physics.add.collider(dogs, butterflies);
+        this.physics.add.collider(mice, butterflies);
+
+        // 4. 플레이어 vs 아이템 (획득)
+        this.physics.add.overlap(player, fishItems, this.collectFish, null, this);
+        this.physics.add.overlap(player, butterflies, this.collectButterfly, null, this);
+        
+        // 스폰 타이머 설정
         this.time.addEvent({ delay: Config.MOUSE_SPAWN_INTERVAL_MS, callback: this.spawnMouseVillain, callbackScope: this, loop: true });
         this.time.addEvent({ delay: Config.DOG_SPAWN_INTERVAL_MS, callback: this.spawnDogVillain, callbackScope: this, loop: true });
         this.time.addEvent({ delay: Config.FISH_SPAWN_INTERVAL_MS, callback: this.spawnFishItem, callbackScope: this, loop: true });
@@ -215,8 +235,6 @@ export default class MainScene extends Phaser.Scene {
                 
                 let trigger = false;
                 const isMobile = this.data.get('isMobile');
-                
-                // SolidJS 쪽에서 설정해주는 변수 확인 (GameCanvas에서 직접 넣어줘야 함)
                 const isActionBtnPressed = this.data.get('isActionBtnPressed');
 
                 const spaceKey = this.data.get('spaceKey');
@@ -272,11 +290,11 @@ export default class MainScene extends Phaser.Scene {
                 const targetX = this.input.activePointer.worldX;
                 const targetY = this.input.activePointer.worldY;
                 
-                // isActionBtnPressed 확인
                 const isActionBtnPressed = this.data.get('isActionBtnPressed');
                 if (!vInput.active && !isActionBtnPressed) {
                     this.physics.moveTo(player, targetX, targetY, speed);
-                    if (Phaser.Math.Distance.Between(player.x, player.y, targetX, targetY) > 10) {
+                    
+                    if (Phaser.Math.Distance.Squared(player.x, player.y, targetX, targetY) > 100) {
                         isMoving = true;
                         player.setFlipX(targetX > player.x);
                     } else {
@@ -330,24 +348,14 @@ export default class MainScene extends Phaser.Scene {
             if (dog.active && dog.body && !dog.isKnockedBack && !dog.isStunned) {
                 this.physics.moveToObject(dog, player, Config.DOG_CHASE_SPEED);
                 dog.setFlipX(dog.body.velocity.x > 0);
-                
-                dogs.getChildren().forEach(otherDog => {
-                    if (dog !== otherDog && otherDog.active) {
-                        const dist = Phaser.Math.Distance.Between(dog.x, dog.y, otherDog.x, otherDog.y);
-                        if (dist < 60) {
-                            const push = new Phaser.Math.Vector2(dog.x - otherDog.x, dog.y - otherDog.y).normalize().scale(50);
-                            dog.body.velocity.add(push);
-                        }
-                    }
-                });
             }
         });
 
         const butterflies = this.data.get('butterflies');
         butterflies.getChildren().forEach(bf => {
             if (bf.active && bf.body) {
-                const dist = Phaser.Math.Distance.Between(player.x, player.y, bf.x, bf.y);
-                if (dist < 150) { 
+                const distSq = Phaser.Math.Distance.Squared(player.x, player.y, bf.x, bf.y);
+                if (distSq < 22500) { 
                     const dir = new Phaser.Math.Vector2(bf.x - player.x, bf.y - player.y).normalize();
                     bf.body.velocity.x = dir.x * 100;
                     bf.body.velocity.y = dir.y * 100;
@@ -393,6 +401,7 @@ export default class MainScene extends Phaser.Scene {
         if (this.data.get('gameOver')) return;
         const items = this.data.get('fishItems');
         if (Math.random() < Config.FISH_SPAWN_PROBABILITY && items.countActive(true) < 2) {
+            // [중요] 아이템은 immovable: true가 되어야 밀리지 않음
             this.spawnEntity(items, 'fish_item_sprite', 'fish_swim', 0.4, true); 
         }
     }
@@ -401,7 +410,11 @@ export default class MainScene extends Phaser.Scene {
         if (this.data.get('gameOver')) return;
         const items = this.data.get('butterflies');
         if (Math.random() < Config.BUTTERFLY_SPAWN_PROBABILITY && items.countActive(true) < 1) {
-            this.spawnEntity(items, 'butterfly_sprite_3frame', 'butterfly_fly', 0.5); 
+            // 나비는 움직이지만, 충돌 시에는 벽처럼 작용하게 하여 밀리지 않게 함
+            const butterfly = this.spawnEntity(items, 'butterfly_sprite_3frame', 'butterfly_fly', 0.5, false);
+            if (butterfly && butterfly.body) {
+                 butterfly.setImmovable(true);
+            }
         }
     }
 
@@ -422,7 +435,7 @@ export default class MainScene extends Phaser.Scene {
         }
 
         const entity = group.get(x, y, spriteKey);
-        if (!entity) return;
+        if (!entity) return null;
 
         entity.setActive(true).setVisible(true);
         entity.enableBody(true, x, y, true, true);
@@ -438,6 +451,7 @@ export default class MainScene extends Phaser.Scene {
         } else {
             entity.setBounce(0.2);
         }
+        return entity;
     }
 
     hitMouse(player, mouse) {
@@ -447,13 +461,10 @@ export default class MainScene extends Phaser.Scene {
         mice.killAndHide(mouse);
         mouse.disableBody(true, true);
 
-        // SolidJS에서 콜백 호출을 위해 리스너 필요 없음 (여기선 데이터만 바꿈)
-        // 다만 점수 업데이트를 위해 외부로 이벤트를 쏴주거나 data.set을 함
         let score = this.data.get('score') || 0;
         score += 10;
         this.data.set('score', score);
         
-        // SolidJS UI용 점수 업데이트 콜백 호출
         const updateScoreUI = this.data.get('updateScoreUI');
         if (updateScoreUI) updateScoreUI(score);
 
@@ -467,7 +478,6 @@ export default class MainScene extends Phaser.Scene {
             const newLevel = currentLvl + 1;
             player.setData('level', newLevel);
             
-            // UI 레벨 업데이트 및 상점 오픈
             const openShopModal = this.data.get('openShopModal');
             if (openShopModal) openShopModal(newLevel, score);
         }
@@ -546,8 +556,10 @@ export default class MainScene extends Phaser.Scene {
         const targets = [...this.data.get('mice').getChildren(), ...this.data.get('dogs').getChildren()];
         targets.forEach(enemy => {
             if (enemy.active && enemy.body) {
-                const dist = Phaser.Math.Distance.Between(player.x, player.y, enemy.x, enemy.y);
-                if (dist <= Config.SHOCKWAVE_RADIUS_END) {
+                const distSq = Phaser.Math.Distance.Squared(player.x, player.y, enemy.x, enemy.y);
+                const radiusSq = Config.SHOCKWAVE_RADIUS_END * Config.SHOCKWAVE_RADIUS_END;
+                
+                if (distSq <= radiusSq) {
                     const dir = new Phaser.Math.Vector2(enemy.x - player.x, enemy.y - player.y).normalize().scale(Config.SHOCKWAVE_PUSH_FORCE);
                     enemy.body.velocity.copy(dir);
                     if (enemy.texture.key.includes('dog')) { 
@@ -585,7 +597,6 @@ export default class MainScene extends Phaser.Scene {
     endGame() {
         this.data.set('gameOver', true);
         const triggerEnd = this.data.get('triggerGameOverModal');
-        // 점수 UI 업데이트
         const score = this.data.get('score') || 0;
         if (triggerEnd) triggerEnd(score);
         
@@ -642,12 +653,13 @@ export default class MainScene extends Phaser.Scene {
         const chunkGroup = this.data.get('chunkGroup');
         const generatedChunks = this.data.get('generatedChunks');
         const cleanupDistance = Config.CHUNK_SIZE_PX * (Config.GENERATION_BUFFER_CHUNKS + 3);
+        const cleanupDistanceSq = cleanupDistance * cleanupDistance; 
 
         chunkGroup.getChildren().forEach(child => {
             if (!child.active) return; 
 
-            const dist = Phaser.Math.Distance.Between(playerX, playerY, child.x + Config.CHUNK_SIZE_PX / 2, child.y + Config.CHUNK_SIZE_PX / 2);
-            if (dist > cleanupDistance) {
+            const distSq = Phaser.Math.Distance.Squared(playerX, playerY, child.x + Config.CHUNK_SIZE_PX / 2, child.y + Config.CHUNK_SIZE_PX / 2);
+            if (distSq > cleanupDistanceSq) {
                 const key = child.getData('chunkKey');
                 if (key) generatedChunks.delete(key);
                 chunkGroup.killAndHide(child); 
