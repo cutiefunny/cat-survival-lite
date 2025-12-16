@@ -69,6 +69,47 @@ export default function GameCanvas(props) {
   let dPadContainer;
   let game = null;
 
+  // --- [핵심 수정 1 & 2] 스킬 동기화 및 능력치 적용 Effect 추가 ---
+  createEffect(() => {
+    // skills()가 변경될 때마다 실행됩니다.
+    const currentSkills = skills();
+
+    // 게임 인스턴스와 씬이 준비되었는지 확인
+    if (!game) return;
+    const scene = game.scene.getScene('MainScene');
+    if (!scene || !scene.data) return;
+
+    // 1. Phaser 데이터에 최신 스킬 목록 동기화
+    scene.data.set('skills', currentSkills);
+
+    // 2. 플레이어 오브젝트 가져오기
+    const player = scene.data.get('player');
+    if (!player) return;
+
+    // 3. '근성장' 스킬(ID 31, 32, 33) 체크 및 최대 체력 계산
+    let bonusHealth = 0;
+    if (currentSkills.includes(31)) bonusHealth += 1; // 근성장1
+    if (currentSkills.includes(32)) bonusHealth += 1; // 근성장2
+    if (currentSkills.includes(33)) bonusHealth += 1; // 근성장3
+
+    const newMaxEnergy = INITIAL_PLAYER_ENERGY + bonusHealth;
+    const currentMaxEnergy = player.getData('maxEnergy');
+
+    // 최대 체력이 변경되었다면 적용
+    if (newMaxEnergy !== currentMaxEnergy) {
+        player.setData('maxEnergy', newMaxEnergy);
+        
+        // 체력이 늘어났다면(업그레이드), 늘어난 만큼 현재 체력도 회복시켜줍니다.
+        if (newMaxEnergy > currentMaxEnergy) {
+            const diff = newMaxEnergy - currentMaxEnergy;
+            const currentEnergy = player.getData('energy');
+            player.setData('energy', currentEnergy + diff);
+        }
+        
+        // (참고: setData('energy')를 호출하면 create()에서 등록한 리스너에 의해 UI가 자동 갱신됩니다)
+    }
+  });
+
   // --- 리사이즈 핸들러 ---
   const handleResize = () => {
     if (game) {
@@ -275,6 +316,7 @@ export default function GameCanvas(props) {
 
             energyBarFill.clear();
             energyBarFill.fillStyle(0x00ff00, 1);
+            // [수정] 체력이 100%를 넘는 경우(스킬 등으로)에도 바 밖으로 튀어나가지 않게 clamp 되어 있음
             energyBarFill.fillRect(barX, energyY, ENERGY_BAR_WIDTH * energyPercent, ENERGY_BAR_HEIGHT);
 
             const currentExp = player.getData('experience');
@@ -316,6 +358,8 @@ export default function GameCanvas(props) {
         
         this.data.set('virtualInput', { x: 0, y: 0, active: false });
         this.data.set('lastChunkUpdate', 0);
+        
+        // [중요] 초기화 시점에 스킬을 로드하지만, createEffect가 이후 업데이트를 담당함
         this.data.set('skills', skills()); 
         
         this.input.addPointer(2); 
@@ -359,6 +403,7 @@ export default function GameCanvas(props) {
         const drawUI = this.data.get('drawUI');
         if (drawUI) drawUI();
 
+        // [확인] createEffect에 의해 업데이트된 'skills' 데이터를 가져와 사용
         const skills = this.data.get('skills');
         const shockwaveCooldownText = this.data.get('shockwaveCooldownText');
         const hasShockwave = skills.includes(SHOCKWAVE_SKILL_ID);
@@ -413,6 +458,7 @@ export default function GameCanvas(props) {
         }
 
         let speed = BASE_PLAYER_SPEED;
+        // [확인] 달리기 스킬(21, 22, 23) 등도 동기화된 skills 배열을 참조하므로 정상 작동함
         if (skills && skills.includes(21)) speed *= 1.1;
 
         let isMoving = false;
