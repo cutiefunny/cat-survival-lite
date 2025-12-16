@@ -1,0 +1,21 @@
+{
+  "name": "cat-survival-lite",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^12.6.0",
+    "phaser": "^3.90.0",
+    "solid-js": "^1.9.10"
+  },
+  "devDependencies": {
+    "vite": "^7.2.4",
+    "vite-plugin-pwa": "^1.2.0",
+    "vite-plugin-solid": "^2.11.10"
+  }
+}
