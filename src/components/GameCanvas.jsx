@@ -61,7 +61,11 @@ export default function GameCanvas(props) {
   const [currentLevel, setCurrentLevel] = createSignal(1);
   const [finalScore, setFinalScore] = createSignal(0);
 
+  // 가상 컨트롤러 입력 상태
+  let virtualInput = { left: false, right: false, up: false, down: false };
+
   let gameContainer;
+  let dPadContainer; // D-Pad DOM 참조
   let game = null;
 
   // --- 핸들러 ---
@@ -80,7 +84,6 @@ export default function GameCanvas(props) {
   };
 
   const handleRestartGame = () => {
-    // [수정] 게임 재시작 시 상태 초기화
     clearSkills();
     setCurrentScore(0);
     setCurrentLevel(1);
@@ -91,9 +94,64 @@ export default function GameCanvas(props) {
     
     if (game) {
         const scene = game.scene.getScene('MainScene');
-        if (scene) {
-            scene.scene.restart(); // 씬 재시작
+        if (scene) scene.scene.restart();
+    }
+  };
+
+  // [모바일] 좌표 기반 D-Pad 터치 핸들러 (대각선 지원)
+  const handleDpadTouch = (e) => {
+    if (e.cancelable) e.preventDefault();
+    e.stopPropagation();
+
+    // 터치 종료/취소 시 입력 초기화
+    if (e.type === 'touchend' || e.type === 'touchcancel') {
+        if (virtualInput.left || virtualInput.right || virtualInput.up || virtualInput.down) {
+            virtualInput = { left: false, right: false, up: false, down: false };
+            syncInputToPhaser();
         }
+        return;
+    }
+
+    const touch = e.touches[0];
+    if (!touch || !dPadContainer) return;
+
+    // D-Pad 중심점 계산
+    const rect = dPadContainer.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    // 중심으로부터 거리 (델타)
+    const dx = touch.clientX - centerX;
+    const dy = touch.clientY - centerY;
+
+    // 감도 (Deadzone)
+    const threshold = 20;
+
+    const nextInput = { left: false, right: false, up: false, down: false };
+
+    // X축 판정
+    if (dx < -threshold) nextInput.left = true;
+    else if (dx > threshold) nextInput.right = true;
+
+    // Y축 판정 (독립적 -> 대각선 가능)
+    if (dy < -threshold) nextInput.up = true;
+    else if (dy > threshold) nextInput.down = true;
+
+    // 상태 변경 시에만 업데이트
+    if (virtualInput.left !== nextInput.left || 
+        virtualInput.right !== nextInput.right || 
+        virtualInput.up !== nextInput.up || 
+        virtualInput.down !== nextInput.down) {
+        
+        virtualInput = nextInput;
+        syncInputToPhaser();
+    }
+  };
+
+  const syncInputToPhaser = () => {
+    if (game) {
+        const scene = game.scene.getScene('MainScene');
+        if (scene) scene.data.set('virtualInput', virtualInput);
     }
   };
 
@@ -157,9 +215,8 @@ export default function GameCanvas(props) {
   }
 
   function create() {
-    // [중요 수정] 재시작 시 게임오버 상태 및 물리 엔진 초기화
     this.data.set('gameOver', false);
-    this.physics.resume(); 
+    this.physics.resume();
 
     if (TILE_COLORS.length === 0) {
       for (let i = 0; i < 10; i++) {
@@ -173,6 +230,7 @@ export default function GameCanvas(props) {
     this.cameras.main.setBackgroundColor('#2d4c1e');
     this.physics.world.setBounds(0, 0, WORLD_BOUNDS_SIZE, WORLD_BOUNDS_SIZE);
 
+    // 텍스처 캐싱
     const chunkVariations = 4;
     const tempRT = this.make.renderTexture({ x: 0, y: 0, width: CHUNK_SIZE_PX + 2, height: CHUNK_SIZE_PX + 2, add: false }, false);
     for (let v = 0; v < chunkVariations; v++) {
@@ -209,12 +267,17 @@ export default function GameCanvas(props) {
     const finalPlayerScale = 0.5 * (isMobile ? 0.7 : 1.0);
     player.setScale(finalPlayerScale);
 
-    // UI 그래픽스
+    // [최적화 1] UI 객체 생성 및 그리기 함수 정의
     const energyBarBg = this.add.graphics();
     const expBarBg = this.add.graphics();
     const energyBarFill = this.add.graphics();
     const expBarFill = this.add.graphics();
     
+    energyBarBg.setDepth(10);
+    energyBarFill.setDepth(10);
+    expBarBg.setDepth(10);
+    expBarFill.setDepth(10);
+
     const shockwaveCooldownText = this.add.text(player.x, player.y, '', {
         fontSize: '18px', color: '#FFFF00', stroke: '#000000', strokeThickness: 4, align: 'center', fontStyle: 'bold'
     });
@@ -223,12 +286,12 @@ export default function GameCanvas(props) {
     shockwaveCooldownText.setVisible(false);
     this.data.set('shockwaveCooldownText', shockwaveCooldownText);
 
-    // [최적화 1] UI 그리기 함수
     const drawUI = () => {
         const barX = player.x - (ENERGY_BAR_WIDTH / 2);
         const energyY = player.y - (player.displayHeight / 2) - 20;
         const expY = energyY + ENERGY_BAR_HEIGHT + 2;
 
+        // 에너지
         const currentEnergy = player.getData('energy');
         const maxEnergy = player.getData('maxEnergy');
         const energyPercent = Phaser.Math.Clamp(currentEnergy / maxEnergy, 0, 1);
@@ -241,6 +304,7 @@ export default function GameCanvas(props) {
         energyBarFill.fillStyle(0x00ff00, 1);
         energyBarFill.fillRect(barX, energyY, ENERGY_BAR_WIDTH * energyPercent, ENERGY_BAR_HEIGHT);
 
+        // 경험치
         const currentExp = player.getData('experience');
         const currentLvl = player.getData('level');
         const nextLvlExp = levelExperience[String(currentLvl + 1)] || 999999;
@@ -262,18 +326,12 @@ export default function GameCanvas(props) {
     };
 
     this.data.set('drawUI', drawUI);
-    // 초기 1회 그리기
     drawUI(); 
     
-    // 데이터 변경 시 자동 갱신
+    // 이벤트 리스너 등록
     player.on('changedata-energy', drawUI);
     player.on('changedata-experience', drawUI);
     player.on('changedata-level', drawUI);
-
-    energyBarBg.setDepth(10);
-    energyBarFill.setDepth(10);
-    expBarBg.setDepth(10);
-    expBarFill.setDepth(10);
 
     this.data.set('player', player);
     this.data.set('mice', this.physics.add.group());
@@ -285,6 +343,8 @@ export default function GameCanvas(props) {
     this.data.set('cursors', this.input.keyboard.createCursorKeys());
     this.data.set('spaceKey', this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE));
     
+    // 데이터 초기화
+    this.data.set('virtualInput', { left: false, right: false, up: false, down: false });
     this.data.set('lastChunkUpdate', 0);
     this.data.set('skills', skills()); 
     
@@ -314,8 +374,6 @@ export default function GameCanvas(props) {
     this.data.set('triggerGameOverModal', (score) => {
       setShowGameOverModal(true);
       setFinalScore(score);
-      // [수정] 게임 오버 시 씬 전체를 일시정지하지 않고, endGame 함수에서 처리하도록 함
-      // this.scene.pause(); <--- 삭제
     });
   }
 
@@ -324,9 +382,11 @@ export default function GameCanvas(props) {
     
     const player = this.data.get('player');
     const cursors = this.data.get('cursors');
+    const vInput = this.data.get('virtualInput') || { left: false, right: false, up: false, down: false };
+
     if (!player || !cursors) return;
 
-    // UI 업데이트 (위치 동기화를 위해)
+    // UI 위치 업데이트
     const drawUI = this.data.get('drawUI');
     if (drawUI) drawUI();
 
@@ -362,6 +422,7 @@ export default function GameCanvas(props) {
             const isMobile = this.data.get('isMobile');
             
             if (isMobile) {
+                // D-Pad 이외의 영역을 멀티터치로 눌렀을 때
                 const p1 = this.input.pointer1.isDown;
                 const p2 = this.input.pointer2.isDown;
                 const wasTwoFinger = this.data.get('wasTwoFingerDown');
@@ -400,30 +461,42 @@ export default function GameCanvas(props) {
     const isKnockedBack = this.data.get('isKnockedBack');
 
     if (!isKnockedBack) {
-        if (this.input.activePointer.isDown) {
+        const left = cursors.left.isDown || vInput.left;
+        const right = cursors.right.isDown || vInput.right;
+        const up = cursors.up.isDown || vInput.up;
+        const down = cursors.down.isDown || vInput.down;
+        const hasKeyInput = left || right || up || down;
+
+        if (hasKeyInput) {
+            player.setVelocity(0);
+            if (left) { player.setVelocityX(-speed); player.setFlipX(false); isMoving = true; }
+            else if (right) { player.setVelocityX(speed); player.setFlipX(true); isMoving = true; }
+            
+            if (up) { player.setVelocityY(-speed); isMoving = true; }
+            else if (down) { player.setVelocityY(speed); isMoving = true; }
+
+            if (isMoving) player.body.velocity.normalize().scale(speed);
+        } else if (this.input.activePointer.isDown) {
+            // D-Pad 입력 없을 때만 터치 이동
             const targetX = this.input.activePointer.worldX;
             const targetY = this.input.activePointer.worldY;
-            this.physics.moveTo(player, targetX, targetY, speed);
             
-            if (Phaser.Math.Distance.Between(player.x, player.y, targetX, targetY) < 10) {
-                player.body.reset(targetX, targetY);
-                isMoving = false;
-            } else {
-                isMoving = true;
-                player.setFlipX(targetX > player.x);
+            if (!vInput.left && !vInput.right && !vInput.up && !vInput.down) {
+                this.physics.moveTo(player, targetX, targetY, speed);
+                if (Phaser.Math.Distance.Between(player.x, player.y, targetX, targetY) < 10) {
+                    player.body.reset(targetX, targetY);
+                    isMoving = false;
+                } else {
+                    isMoving = true;
+                    player.setFlipX(targetX > player.x);
+                }
             }
         } else {
             player.setVelocity(0);
-            if (cursors.left.isDown) { player.setVelocityX(-speed); player.setFlipX(false); isMoving = true; }
-            else if (cursors.right.isDown) { player.setVelocityX(speed); player.setFlipX(true); isMoving = true; }
-            
-            if (cursors.up.isDown) { player.setVelocityY(-speed); isMoving = true; }
-            else if (cursors.down.isDown) { player.setVelocityY(speed); isMoving = true; }
-
-            if (isMoving) player.body.velocity.normalize().scale(speed);
         }
     }
 
+    // [UX] 애니메이션 우선순위
     const isInvincible = player.getData('isInvincible');
     const isHaak = this.data.get('isHaak');
 
@@ -499,7 +572,7 @@ export default function GameCanvas(props) {
         }
     });
 
-    // [최적화 2] 청크 생성 주기 조절
+    // [최적화 2] 청크 업데이트 쓰로틀링 (0.2s)
     const lastChunkUpdate = this.data.get('lastChunkUpdate');
     if (time - lastChunkUpdate > 200) { 
         generateSurroundingChunks.call(this, player.x, player.y);
@@ -508,7 +581,6 @@ export default function GameCanvas(props) {
   }
 
   // --- Helper Functions ---
-  
   function spawnMouseVillain() {
     if (this.data.get('gameOver')) return;
     const mice = this.data.get('mice');
@@ -654,8 +726,6 @@ export default function GameCanvas(props) {
     this.data.set('isHaak', true);
     this.time.delayedCall(500, () => {
         this.data.set('isHaak', false);
-        player.setTexture('player_sprite');
-        player.play('cat_walk', true);
     }, [], this);
 
     const shockwaveCircle = this.add.circle(player.x, player.y, SHOCKWAVE_RADIUS_START, SHOCKWAVE_COLOR, 0.7);
@@ -718,18 +788,18 @@ export default function GameCanvas(props) {
     const triggerEnd = this.data.get('triggerGameOverModal');
     triggerEnd(this.data.get('score'));
     
-    // [수정] 게임 오버 시 캐릭터 붉게 표시 및 애니메이션 정지
+    // 게임 오버 처리
     const player = this.data.get('player');
     if(player) {
         player.setTint(0xff0000); 
         player.anims.stop();
     }
     
-    // [수정] 씬을 pause 하는 대신 물리와 타이머만 멈춤
     this.physics.pause();
-    this.time.removeAllEvents(); // 스폰 타이머 제거
+    this.time.removeAllEvents();
   }
 
+  // [최적화 3] 청크 오브젝트 풀링
   function generateTileChunk(chunkX, chunkY) {
     const generatedChunks = this.data.get('generatedChunks');
     const chunkKey = `${chunkX}_${chunkY}`;
@@ -741,6 +811,7 @@ export default function GameCanvas(props) {
     const randomTextureKey = `chunk_texture_${Phaser.Math.Between(0, 3)}`;
 
     const chunkGroup = this.data.get('chunkGroup');
+    // 사용하지 않는 객체 재활용
     let chunkImage = chunkGroup.getFirstDead(false);
 
     if (!chunkImage) {
@@ -775,12 +846,13 @@ export default function GameCanvas(props) {
     const cleanupDistance = CHUNK_SIZE_PX * (GENERATION_BUFFER_CHUNKS + 3);
 
     chunkGroup.getChildren().forEach(child => {
-      if (!child.active) return;
+      if (!child.active) return; 
 
       const dist = Phaser.Math.Distance.Between(playerX, playerY, child.x + CHUNK_SIZE_PX / 2, child.y + CHUNK_SIZE_PX / 2);
       if (dist > cleanupDistance) {
         const key = child.getData('chunkKey');
         if (key) generatedChunks.delete(key);
+        // 비활성화 (풀링 반납)
         chunkGroup.killAndHide(child); 
       }
     });
@@ -790,7 +862,26 @@ export default function GameCanvas(props) {
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div ref={gameContainer} style={{ width: '100%', height: '100%' }}></div>
 
-      {/* --- Shop Modal --- */}
+      {/* --- 가상 D-Pad (모바일 가로 모드) --- */}
+      <div 
+        className="d-pad-container" 
+        ref={dPadContainer}
+      >
+        <div 
+            className="d-pad-grid"
+            onTouchStart={handleDpadTouch}
+            onTouchMove={handleDpadTouch}
+            onTouchEnd={handleDpadTouch}
+            onTouchCancel={handleDpadTouch}
+        >
+            {/* 버튼은 시각적 역할만 담당 (active 클래스는 CSS나 JS로 제어 가능) */}
+            <div className={`d-pad-btn d-pad-up`}>▲</div>
+            <div className={`d-pad-btn d-pad-left`}>◀</div>
+            <div className={`d-pad-btn d-pad-right`}>▶</div>
+            <div className={`d-pad-btn d-pad-down`}>▼</div>
+        </div>
+      </div>
+
       <ShopModal 
         isVisible={showShopModal()} 
         onClose={handleResumeGame} 
@@ -798,13 +889,50 @@ export default function GameCanvas(props) {
         skills={skills()} 
       />
 
-      {/* --- Game Over Modal --- */}
       <GameOverModal
         isVisible={showGameOverModal()}
         score={finalScore()}
         onClose={handleRestartGame}
         onSave={(name) => console.log(`Saving score for: ${name}`)}
       />
+
+      <style>{`
+        .d-pad-container {
+            display: none;
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            z-index: 50;
+            opacity: 0.7;
+            touch-action: none;
+        }
+        .d-pad-grid {
+            display: grid;
+            grid-template-columns: 60px 60px 60px;
+            grid-template-rows: 60px 60px 60px;
+            gap: 0px;
+            pointer-events: auto; 
+        }
+        .d-pad-btn {
+            width: 60px; height: 60px;
+            background-color: rgba(255, 255, 255, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            color: white; font-size: 24px;
+            display: flex; justify-content: center; align-items: center;
+            user-select: none; 
+            pointer-events: none; /* 컨테이너로 터치 전달 */
+        }
+        
+        .d-pad-up    { grid-column: 2; grid-row: 1; }
+        .d-pad-left  { grid-column: 1; grid-row: 2; }
+        .d-pad-right { grid-column: 3; grid-row: 2; }
+        .d-pad-down  { grid-column: 2; grid-row: 3; }
+
+        @media only screen and (max-width: 900px) and (orientation: landscape) {
+            .d-pad-container { display: block; }
+        }
+      `}</style>
     </div>
   );
 }
