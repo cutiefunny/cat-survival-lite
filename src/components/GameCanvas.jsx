@@ -26,13 +26,11 @@ const PLAYER_PUSH_BACK_FORCE = 300;
 const KNOCKBACK_DURATION_MS = 250;
 const PLAYER_INVINCIBILITY_DURATION_MS = 500;
 
-// 바(Bar) 디자인 상수
 const ENERGY_BAR_WIDTH = 60;
 const ENERGY_BAR_HEIGHT = 8;
 const EXP_BAR_WIDTH = 60;
 const EXP_BAR_HEIGHT = 6;
 
-// 스폰 설정
 const MOUSE_SPAWN_INTERVAL_MS = 1000;
 const MAX_ACTIVE_MICE = 30;
 const DOG_SPAWN_INTERVAL_MS = 2000;
@@ -82,12 +80,20 @@ export default function GameCanvas(props) {
   };
 
   const handleRestartGame = () => {
+    // [수정] 게임 재시작 시 상태 초기화
     clearSkills();
+    setCurrentScore(0);
+    setCurrentLevel(1);
+    setFinalScore(0);
+    
     setShowGameOverModal(false);
     setShowShopModal(false);
+    
     if (game) {
         const scene = game.scene.getScene('MainScene');
-        if (scene) scene.scene.restart();
+        if (scene) {
+            scene.scene.restart(); // 씬 재시작
+        }
     }
   };
 
@@ -151,6 +157,10 @@ export default function GameCanvas(props) {
   }
 
   function create() {
+    // [중요 수정] 재시작 시 게임오버 상태 및 물리 엔진 초기화
+    this.data.set('gameOver', false);
+    this.physics.resume(); 
+
     if (TILE_COLORS.length === 0) {
       for (let i = 0; i < 10; i++) {
         const hue = Phaser.Math.FloatBetween(0.25, 0.40);
@@ -163,7 +173,6 @@ export default function GameCanvas(props) {
     this.cameras.main.setBackgroundColor('#2d4c1e');
     this.physics.world.setBounds(0, 0, WORLD_BOUNDS_SIZE, WORLD_BOUNDS_SIZE);
 
-    // 텍스처 캐싱
     const chunkVariations = 4;
     const tempRT = this.make.renderTexture({ x: 0, y: 0, width: CHUNK_SIZE_PX + 2, height: CHUNK_SIZE_PX + 2, add: false }, false);
     for (let v = 0; v < chunkVariations; v++) {
@@ -200,17 +209,12 @@ export default function GameCanvas(props) {
     const finalPlayerScale = 0.5 * (isMobile ? 0.7 : 1.0);
     player.setScale(finalPlayerScale);
 
-    // [최적화 1] UI 객체 생성
+    // UI 그래픽스
     const energyBarBg = this.add.graphics();
     const expBarBg = this.add.graphics();
     const energyBarFill = this.add.graphics();
     const expBarFill = this.add.graphics();
     
-    energyBarBg.setDepth(10);
-    energyBarFill.setDepth(10);
-    expBarBg.setDepth(10);
-    expBarFill.setDepth(10);
-
     const shockwaveCooldownText = this.add.text(player.x, player.y, '', {
         fontSize: '18px', color: '#FFFF00', stroke: '#000000', strokeThickness: 4, align: 'center', fontStyle: 'bold'
     });
@@ -219,13 +223,12 @@ export default function GameCanvas(props) {
     shockwaveCooldownText.setVisible(false);
     this.data.set('shockwaveCooldownText', shockwaveCooldownText);
 
-    // [최적화 1] UI 그리기 함수 정의 (update 루프에서 제거)
+    // [최적화 1] UI 그리기 함수
     const drawUI = () => {
         const barX = player.x - (ENERGY_BAR_WIDTH / 2);
         const energyY = player.y - (player.displayHeight / 2) - 20;
         const expY = energyY + ENERGY_BAR_HEIGHT + 2;
 
-        // 에너지 바
         const currentEnergy = player.getData('energy');
         const maxEnergy = player.getData('maxEnergy');
         const energyPercent = Phaser.Math.Clamp(currentEnergy / maxEnergy, 0, 1);
@@ -238,7 +241,6 @@ export default function GameCanvas(props) {
         energyBarFill.fillStyle(0x00ff00, 1);
         energyBarFill.fillRect(barX, energyY, ENERGY_BAR_WIDTH * energyPercent, ENERGY_BAR_HEIGHT);
 
-        // 경험치 바
         const currentExp = player.getData('experience');
         const currentLvl = player.getData('level');
         const nextLvlExp = levelExperience[String(currentLvl + 1)] || 999999;
@@ -259,23 +261,19 @@ export default function GameCanvas(props) {
         expBarFill.fillRect(barX, expY, EXP_BAR_WIDTH * expPercent, EXP_BAR_HEIGHT);
     };
 
-    // [최적화 1] 데이터 변경 시에만 UI 그리기
     this.data.set('drawUI', drawUI);
     // 초기 1회 그리기
     drawUI(); 
-    // 리스너 등록
+    
+    // 데이터 변경 시 자동 갱신
     player.on('changedata-energy', drawUI);
     player.on('changedata-experience', drawUI);
     player.on('changedata-level', drawUI);
-    // 위치 이동 시 UI도 따라가야 하므로 이건 어쩔 수 없이 update에서 위치만 갱신하거나, 
-    // 여기서는 매번 새로 그리는 drawUI를 update에서도 호출해야 할 수 있음.
-    // 하지만 바의 '길이' 연산이 무거운 게 아니므로, '위치' 갱신을 위해 update에서 호출하되 
-    // fillRect 등의 호출 빈도는 유지. 
-    // *수정*: 캐릭터가 움직이면 바도 따라 움직여야 하므로 drawUI는 update에서 호출하는 게 맞습니다.
-    // 다만 '값 변경'이 없으면 계산을 줄일 수 있지만, 그래픽스 위치 이동 비용이 더 큽니다.
-    // 따라서 이번 최적화에서는 '청크 생성' 최적화에 집중하고 UI는 기존대로 두거나
-    // 컨테이너에 담아 위치만 옮기는 것이 좋습니다. 
-    // 여기서는 안전하게 기존 방식을 조금 다듬어서 update에 남겨두되, 청크 최적화에 집중하겠습니다.
+
+    energyBarBg.setDepth(10);
+    energyBarFill.setDepth(10);
+    expBarBg.setDepth(10);
+    expBarFill.setDepth(10);
 
     this.data.set('player', player);
     this.data.set('mice', this.physics.add.group());
@@ -287,9 +285,7 @@ export default function GameCanvas(props) {
     this.data.set('cursors', this.input.keyboard.createCursorKeys());
     this.data.set('spaceKey', this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE));
     
-    // [최적화 2] 청크 업데이트 타이머 초기화
     this.data.set('lastChunkUpdate', 0);
-
     this.data.set('skills', skills()); 
     
     this.input.addPointer(2); 
@@ -318,7 +314,8 @@ export default function GameCanvas(props) {
     this.data.set('triggerGameOverModal', (score) => {
       setShowGameOverModal(true);
       setFinalScore(score);
-      this.scene.pause();
+      // [수정] 게임 오버 시 씬 전체를 일시정지하지 않고, endGame 함수에서 처리하도록 함
+      // this.scene.pause(); <--- 삭제
     });
   }
 
@@ -329,8 +326,7 @@ export default function GameCanvas(props) {
     const cursors = this.data.get('cursors');
     if (!player || !cursors) return;
 
-    // --- UI 업데이트 (위치 동기화를 위해 여기서 호출) ---
-    // *최적화*: drawUI 함수를 create에서 정의하고 여기서 호출
+    // UI 업데이트 (위치 동기화를 위해)
     const drawUI = this.data.get('drawUI');
     if (drawUI) drawUI();
 
@@ -503,9 +499,9 @@ export default function GameCanvas(props) {
         }
     });
 
-    // [최적화 2] 청크 생성 주기 조절 (Throttling)
+    // [최적화 2] 청크 생성 주기 조절
     const lastChunkUpdate = this.data.get('lastChunkUpdate');
-    if (time - lastChunkUpdate > 200) { // 0.2초마다 실행
+    if (time - lastChunkUpdate > 200) { 
         generateSurroundingChunks.call(this, player.x, player.y);
         this.data.set('lastChunkUpdate', time);
     }
@@ -513,7 +509,6 @@ export default function GameCanvas(props) {
 
   // --- Helper Functions ---
   
-  // (스폰 함수들은 기존과 동일)
   function spawnMouseVillain() {
     if (this.data.get('gameOver')) return;
     const mice = this.data.get('mice');
@@ -722,12 +717,19 @@ export default function GameCanvas(props) {
     this.data.set('gameOver', true);
     const triggerEnd = this.data.get('triggerGameOverModal');
     triggerEnd(this.data.get('score'));
+    
+    // [수정] 게임 오버 시 캐릭터 붉게 표시 및 애니메이션 정지
     const player = this.data.get('player');
-    player.setTint(0xff0000); 
+    if(player) {
+        player.setTint(0xff0000); 
+        player.anims.stop();
+    }
+    
+    // [수정] 씬을 pause 하는 대신 물리와 타이머만 멈춤
     this.physics.pause();
+    this.time.removeAllEvents(); // 스폰 타이머 제거
   }
 
-  // [최적화 3] 청크 이미지 오브젝트 풀링 적용
   function generateTileChunk(chunkX, chunkY) {
     const generatedChunks = this.data.get('generatedChunks');
     const chunkKey = `${chunkX}_${chunkY}`;
@@ -739,17 +741,14 @@ export default function GameCanvas(props) {
     const randomTextureKey = `chunk_texture_${Phaser.Math.Between(0, 3)}`;
 
     const chunkGroup = this.data.get('chunkGroup');
-    // 풀에서 죽은(사용 안 하는) 이미지 가져오기
     let chunkImage = chunkGroup.getFirstDead(false);
 
     if (!chunkImage) {
-        // 없으면 새로 생성
         chunkImage = this.add.image(startWorldX, startWorldY, randomTextureKey);
         chunkImage.setOrigin(0, 0);
         chunkImage.setDepth(0);
         chunkGroup.add(chunkImage);
     } else {
-        // 있으면 재활용
         chunkImage.setTexture(randomTextureKey);
         chunkImage.setPosition(startWorldX, startWorldY);
         chunkImage.setActive(true);
@@ -776,14 +775,12 @@ export default function GameCanvas(props) {
     const cleanupDistance = CHUNK_SIZE_PX * (GENERATION_BUFFER_CHUNKS + 3);
 
     chunkGroup.getChildren().forEach(child => {
-      // *중요*: 활성화된 청크만 거리 계산 (비활성화된 건 이미 풀에 반납된 것)
       if (!child.active) return;
 
       const dist = Phaser.Math.Distance.Between(playerX, playerY, child.x + CHUNK_SIZE_PX / 2, child.y + CHUNK_SIZE_PX / 2);
       if (dist > cleanupDistance) {
         const key = child.getData('chunkKey');
         if (key) generatedChunks.delete(key);
-        // destroy 대신 비활성화 (풀링)
         chunkGroup.killAndHide(child); 
       }
     });
