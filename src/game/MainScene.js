@@ -26,19 +26,40 @@ export default class MainScene extends Phaser.Scene {
     }
 
     create() {
+        // [수정] 배경색을 회색으로 설정 (타일 로드 실패 시 배경과 구분하기 위함)
         this.cameras.main.setBackgroundColor('#808080');
 
         this.data.set('gameOver', false);
         this.physics.resume();
 
-        // 1. Tiled 맵 로드
+        // 1. Tiled 맵 로드 및 동적 타일셋 연결
         const map = this.make.tilemap({ key: 'stage1_map' });
-        const grassTileset = map.addTilesetImage('tile_grass', 'grass_img');
-        const plantTileset = map.addTilesetImage('tile_tree', 'tree_img');
+        
+        // JSON 데이터에 저장된 타일셋 이름을 가져옵니다.
+        // 순서: 보통 0번이 지형(Grass), 1번이 장식/벽(Plant)입니다.
+        let grassTilesetName = 'tile_grass'; // 기본값
+        let plantTilesetName = 'tile_tree';  // 기본값
 
-        if (!grassTileset || !plantTileset) console.error("타일셋 로드 실패");
+        if (map.tilesets.length > 0) {
+            grassTilesetName = map.tilesets[0].name;
+            if (map.tilesets.length > 1) {
+                plantTilesetName = map.tilesets[1].name;
+            }
+        }
 
-        const groundLayer = map.createLayer('grass', grassTileset, 0, 0);
+        // 실제 로드된 이름을 사용하여 이미지 연결
+        const grassTileset = map.addTilesetImage(grassTilesetName, 'grass_img');
+        const plantTileset = map.addTilesetImage(plantTilesetName, 'tree_img');
+
+        // [디버그] 연결 상태 출력 (문제 해결 후 주석 처리 가능)
+        console.log(`Map Loaded: Grass='${grassTilesetName}'(${grassTileset ? 'OK' : 'FAIL'}), Plant='${plantTilesetName}'(${plantTileset ? 'OK' : 'FAIL'})`);
+
+        if (!grassTileset || !plantTileset) {
+            console.error("타일셋 로드 실패! JSON 파일의 타일셋 이름과 코드가 일치하지 않습니다.");
+        }
+
+        // 레이어 생성 (이름 불일치 대비 Fallback 추가)
+        const groundLayer = map.createLayer('grass', grassTileset, 0, 0) || map.createLayer('Ground', grassTileset, 0, 0);
         const wallLayer = map.createLayer('Walls', plantTileset, 0, 0);
 
         if (wallLayer) {
@@ -172,18 +193,6 @@ export default class MainScene extends Phaser.Scene {
 
         this.input.addPointer(2); 
         this.cameras.main.startFollow(player, true, 0.05, 0.05);
-
-        // [DEBUG] 모바일 디버그용 텍스트 추가 (화면 좌측 상단)
-        this.debugText = this.add.text(10, 80, 'Initializing Debug...', {
-            fontSize: '14px',
-            color: '#ffffff',
-            backgroundColor: '#00000088', // 반투명 검은 배경
-            stroke: '#000000',
-            strokeThickness: 2,
-            fontFamily: 'monospace'
-        });
-        this.debugText.setScrollFactor(0); // 카메라 따라 다니지 않게 고정
-        this.debugText.setDepth(100);      // 가장 위에 표시
 
         // 6. 충돌
         const mice = this.data.get('mice');
@@ -381,26 +390,6 @@ export default class MainScene extends Phaser.Scene {
                 bf.setFlipX(bf.body.velocity.x < 0);
             }
         });
-
-        // [DEBUG] 디버그 정보 실시간 업데이트
-        if (this.debugText) {
-            const player = this.data.get('player');
-            const grassTex = this.textures.get('grass_img');
-            const treeTex = this.textures.get('tree_img');
-            const rendererType = this.game.renderer.type === Phaser.WEBGL ? 'WebGL' : 'Canvas';
-            
-            this.debugText.setText([
-                `FPS: ${this.game.loop.actualFps.toFixed(1)}`,
-                `Renderer: ${rendererType}`,
-                `Mobile: ${this.data.get('isMobile')}`,
-                `Screen: ${window.innerWidth} x ${window.innerHeight}`,
-                `PixelRatio: ${window.devicePixelRatio}`,
-                `Grass Tex: ${grassTex.key} (Valid: ${grassTex.key !== '__MISSING'})`,
-                `Grass Size: ${grassTex.getSourceImage().width}x${grassTex.getSourceImage().height}`,
-                `Tree Tex: ${treeTex.key} (Valid: ${treeTex.key !== '__MISSING'})`,
-                `Player Pos: ${player ? Math.floor(player.x) + ',' + Math.floor(player.y) : 'N/A'}`
-            ]);
-        }
     }
 
     startShockwaveCooldown(duration) {
