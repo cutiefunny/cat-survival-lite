@@ -134,7 +134,7 @@
         {
          "columns":8,
          "firstgid":1,
-         "image":"..\/tilesets\/TX Tileset Grass.png",
+         "image":"..\/tilesets\/TX_Tileset_Grass.png",
          "imageheight":256,
          "imagewidth":256,
          "margin":0,
@@ -147,7 +147,7 @@
         {
          "columns":16,
          "firstgid":65,
-         "image":"..\/tilesets\/TX Plant.png",
+         "image":"..\/tilesets\/TX_Plant.png",
          "imageheight":512,
          "imagewidth":512,
          "margin":0,
