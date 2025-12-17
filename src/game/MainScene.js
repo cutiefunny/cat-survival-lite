@@ -20,7 +20,8 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('cat_cry', '/images/cat_cry.png');
         this.load.image('cat_haak', '/images/cat_haak.png');
 
-        this.load.image('tileset_img', '/assets/tilesets/TX Tileset Grass.png');
+        this.load.image('grass_img', '/assets/tilesets/TX Tileset Grass.png');
+        this.load.image('tree_img', '/assets/tilesets/TX Plant.png');
         this.load.tilemapTiledJSON('stage1_map', '/assets/maps/stage1.json');
     }
 
@@ -30,12 +31,13 @@ export default class MainScene extends Phaser.Scene {
 
         // 1. Tiled 맵 로드
         const map = this.make.tilemap({ key: 'stage1_map' });
-        const tileset = map.addTilesetImage('tileser_nature', 'tileset_img');
+        const grassTileset = map.addTilesetImage('tile_grass', 'grass_img');
+        const plantTileset = map.addTilesetImage('tile_tree', 'tree_img');
 
-        if (!tileset) console.error("타일셋 로드 실패");
+        if (!grassTileset || !plantTileset) console.error("타일셋 로드 실패");
 
-        const groundLayer = map.createLayer('Ground', tileset, 0, 0);
-        const wallLayer = map.createLayer('Walls', tileset, 0, 0);
+        const groundLayer = map.createLayer('grass', grassTileset, 0, 0);
+        const wallLayer = map.createLayer('Walls', plantTileset, 0, 0);
 
         if (wallLayer) {
             wallLayer.setCollisionByExclusion([-1]);
@@ -69,7 +71,7 @@ export default class MainScene extends Phaser.Scene {
         const finalPlayerScale = 0.5 * (isMobile ? 0.7 : 1.0);
         player.setScale(finalPlayerScale);
 
-        // --- 가상 조이스틱 (왼쪽 하단 배치) ---
+        // --- 가상 조이스틱 (왼쪽 하단) ---
         if (isMobile) {
             this.joyStick = this.plugins.get('rexVirtualJoystick').add(this, {
                 x: 120,
@@ -198,6 +200,14 @@ export default class MainScene extends Phaser.Scene {
         this.time.addEvent({ delay: Config.BUTTERFLY_SPAWN_INTERVAL_MS, callback: this.spawnButterflyVillain, callbackScope: this, loop: true });
     }
 
+    // [신규] UI 업데이트 헬퍼 함수
+    updateShockwaveUI(isReady) {
+        const setShockwaveReady = this.data.get('setShockwaveReady');
+        if (setShockwaveReady) {
+            setShockwaveReady(isReady);
+        }
+    }
+
     update(time, delta) {
         if (this.data.get('gameOver')) return;
         
@@ -206,62 +216,55 @@ export default class MainScene extends Phaser.Scene {
 
         if (!player || !cursors) return;
 
-        // 스킬
+        // --- 스킬 쿨타임 로직 ---
         const skills = this.data.get('skills') || [];
-        const shockwaveCooldownText = this.data.get('shockwaveCooldownText');
         const hasShockwave = skills.includes(Config.SHOCKWAVE_SKILL_ID);
-        let isShockwaveArmed = this.data.get('shockwaveArmed');
-        
-        let shockwaveTimer = this.data.get('shockwavePhaserEvent');
-        if (hasShockwave && !shockwaveTimer) {
-            this.data.set('shockwaveArmed', false);
-            shockwaveTimer = this.time.addEvent({
-                delay: Config.SHOCKWAVE_INTERVAL_MS,
-                callback: () => {
-                    if (player.active && !this.data.get('gameOver')) {
-                        this.data.set('shockwaveArmed', true);
-                    }
-                },
-                loop: true
-            });
-            this.data.set('shockwavePhaserEvent', shockwaveTimer);
+        const shockwaveCooldownText = this.data.get('shockwaveCooldownText');
+
+        // 스킬 보유 시 초기화 로직
+        if (hasShockwave && this.data.get('shockwaveReady') === undefined) {
+             this.data.set('shockwaveReady', false);
+             this.updateShockwaveUI(false); // [UI] 버튼 숨김
+             this.startShockwaveCooldown(Config.SHOCKWAVE_INTERVAL_MS || 10000);
         }
 
         if (hasShockwave && shockwaveCooldownText) {
-            shockwaveCooldownText.setPosition(player.x, player.y - (player.displayHeight / 2) * player.scaleY - 40);
-            
-            if (isShockwaveArmed) {
-                shockwaveCooldownText.setText('⚡');
-                shockwaveCooldownText.setVisible(true);
-                
-                let trigger = false;
-                const isMobile = this.data.get('isMobile');
-                const isActionBtnPressed = this.data.get('isActionBtnPressed');
+             shockwaveCooldownText.setPosition(player.x, player.y - (player.displayHeight / 2) * player.scaleY - 40);
+             shockwaveCooldownText.setVisible(true);
+             
+             const isReady = this.data.get('shockwaveReady');
 
-                const spaceKey = this.data.get('spaceKey');
-                if (Phaser.Input.Keyboard.JustDown(spaceKey)) trigger = true;
-                if (this.input.activePointer.rightButtonDown()) trigger = true;
-                if (isMobile && isActionBtnPressed) trigger = true;
+             if (isReady) {
+                 shockwaveCooldownText.setText('⚡');
+                 let trigger = false;
+                 
+                 const spaceKey = this.data.get('spaceKey');
+                 if (Phaser.Input.Keyboard.JustDown(spaceKey)) trigger = true;
+                 if (this.input.activePointer.rightButtonDown()) trigger = true;
+                 
+                 const isActionBtnPressed = this.data.get('isActionBtnPressed');
+                 if (isActionBtnPressed) trigger = true;
 
-                if (trigger) {
-                    this.triggerShockwave(player);
-                    this.data.set('shockwaveArmed', false);
-                    if (shockwaveTimer) shockwaveTimer.elapsed = 0;
-                }
-            } else if (shockwaveTimer) {
-                const remain = shockwaveTimer.getRemaining();
-                if (remain > 0) {
-                    shockwaveCooldownText.setText(Math.ceil(remain / 1000));
-                    shockwaveCooldownText.setVisible(true);
-                } else {
-                    shockwaveCooldownText.setText('⚡');
-                }
-            }
-        } else {
-            if (shockwaveCooldownText) shockwaveCooldownText.setVisible(false);
+                 if (trigger) {
+                     this.triggerShockwave(player);
+                     // 스킬 사용 후 쿨타임 시작 및 UI 숨김
+                     this.data.set('shockwaveReady', false);
+                     this.updateShockwaveUI(false); // [UI] 버튼 숨김
+                     this.startShockwaveCooldown(Config.SHOCKWAVE_INTERVAL_MS || 10000);
+                 }
+             } else {
+                 const timer = this.data.get('shockwaveTimerEvent');
+                 if (timer) {
+                     const remain = timer.getRemaining(); 
+                     const remainSec = Math.ceil(remain / 1000);
+                     shockwaveCooldownText.setText(remainSec);
+                 }
+             }
+        } else if (shockwaveCooldownText) {
+             shockwaveCooldownText.setVisible(false);
         }
 
-        // --- 이동 로직 (아날로그 속도 조절 적용) ---
+        // --- 이동 로직 ---
         let speed = Config.BASE_PLAYER_SPEED;
         if (skills && skills.includes(21)) speed *= 1.1;
 
@@ -272,21 +275,15 @@ export default class MainScene extends Phaser.Scene {
             let moveX = 0;
             let moveY = 0;
 
-            // 1. 키보드 입력 (PC용 - 디지털)
             if (cursors.left.isDown) moveX -= 1;
             if (cursors.right.isDown) moveX += 1;
             if (cursors.up.isDown) moveY -= 1;
             if (cursors.down.isDown) moveY += 1;
 
-            // 2. 조이스틱 입력 (모바일용 - 아날로그)
             if (this.joyStick && this.joyStick.force > 0) {
-                // 키보드 입력이 없을 때만 적용
                 if (moveX === 0 && moveY === 0) {
-                    // force: 0 ~ radius 사이의 값. 1.0(최대)로 정규화
                     const force = Math.min(this.joyStick.force, this.joyStick.radius) / this.joyStick.radius;
-                    const rotation = this.joyStick.rotation; // 라디안 각도
-
-                    // 각도와 힘을 이용해 벡터 생성 (살살 밀면 force가 작아져서 천천히 움직임)
+                    const rotation = this.joyStick.rotation;
                     moveX = Math.cos(rotation) * force;
                     moveY = Math.sin(rotation) * force;
                 }
@@ -294,14 +291,10 @@ export default class MainScene extends Phaser.Scene {
 
             if (moveX !== 0 || moveY !== 0) {
                 const len = Math.sqrt(moveX * moveX + moveY * moveY);
-                
-                // 길이가 1보다 클 때만 정규화 (최대 속도 제한)
-                // 길이가 1보다 작으면(조이스틱 살살 밀기) 그 비율을 유지하여 느리게 이동
                 if (len > 1) {
                     moveX /= len;
                     moveY /= len;
                 }
-                
                 player.setVelocity(moveX * speed, moveY * speed);
                 isMoving = true;
                 player.setFlipX(moveX > 0);
@@ -322,17 +315,17 @@ export default class MainScene extends Phaser.Scene {
                 player.anims.play('cat_walk', true);
             } else {
                 player.anims.stop();
+                player.setTexture('player_sprite'); 
                 player.setFrame(0);
             }
         }
 
-        // 적 AI
+        // --- 적 AI 로직 ---
         const mice = this.data.get('mice');
         mice.getChildren().forEach(mouse => {
             if (mouse.active && mouse.body) {
                 const distSq = Phaser.Math.Distance.Squared(player.x, player.y, mouse.x, mouse.y);
                 const gatherSpeed = 70;
-
                 if (distSq < Config.FLEE_RADIUS_SQ) {
                     const fleeX = mouse.x - (player.x - mouse.x);
                     const fleeY = mouse.y - (player.y - mouse.y);
@@ -376,7 +369,26 @@ export default class MainScene extends Phaser.Scene {
         });
     }
 
-    // Helper Methods
+    startShockwaveCooldown(duration) {
+        const existingTimer = this.data.get('shockwaveTimerEvent');
+        if (existingTimer) {
+            existingTimer.remove();
+        }
+
+        const timer = this.time.addEvent({
+            delay: duration,
+            callback: () => {
+                 this.data.set('shockwaveReady', true);
+                 this.updateShockwaveUI(true); // [UI] 쿨타임 끝 -> 버튼 표시
+                 this.data.set('shockwaveTimerEvent', null);
+            },
+            callbackScope: this,
+            loop: false 
+        });
+        
+        this.data.set('shockwaveTimerEvent', timer);
+    }
+
     spawnMouseVillain() {
         if (this.data.get('gameOver')) return;
         const mice = this.data.get('mice');
@@ -414,16 +426,13 @@ export default class MainScene extends Phaser.Scene {
         const cam = this.cameras.main;
         const pad = 100;
         let x, y;
-        
         const worldBounds = this.physics.world.bounds;
         const boundMargin = 50; 
-
         let attempts = 0;
         let validPosition = false;
 
         while (!validPosition && attempts < 10) {
             attempts++;
-            
             if (isStatic) { 
                 x = Phaser.Math.Between(cam.worldView.left, cam.worldView.right);
                 y = Phaser.Math.Between(cam.worldView.top, cam.worldView.bottom);
@@ -434,10 +443,8 @@ export default class MainScene extends Phaser.Scene {
                 else if (side === 2) { x = cam.scrollX - pad; y = Phaser.Math.Between(cam.scrollY, cam.scrollY + cam.height); }
                 else { x = cam.scrollX + cam.width + pad; y = Phaser.Math.Between(cam.scrollY, cam.scrollY + cam.height); }
             }
-
             x = Phaser.Math.Clamp(x, worldBounds.x + boundMargin, worldBounds.width - boundMargin);
             y = Phaser.Math.Clamp(y, worldBounds.y + boundMargin, worldBounds.height - boundMargin);
-
             validPosition = true; 
         }
 
@@ -446,13 +453,10 @@ export default class MainScene extends Phaser.Scene {
 
         entity.setActive(true).setVisible(true);
         entity.enableBody(true, x, y, true, true);
-        
         const isMobile = this.data.get('isMobile');
         const scaleFactor = isMobile ? 0.7 : 1.0;
         entity.setScale(scaleBase * scaleFactor);
-        
         entity.play(animKey);
-        
         if (isStatic) {
             entity.setImmovable(true);
             entity.setCollideWorldBounds(false);
@@ -530,7 +534,10 @@ export default class MainScene extends Phaser.Scene {
 
         player.setTexture('cat_haak');
         this.data.set('isHaak', true);
-        this.time.delayedCall(500, () => { this.data.set('isHaak', false); }, [], this);
+        
+        this.time.delayedCall(500, () => { 
+            this.data.set('isHaak', false); 
+        }, [], this);
 
         const shockwaveCircle = this.add.circle(player.x, player.y, Config.SHOCKWAVE_RADIUS_START, Config.SHOCKWAVE_COLOR, 0.7);
         shockwaveCircle.setStrokeStyle(Config.SHOCKWAVE_LINE_WIDTH, Config.SHOCKWAVE_COLOR, 0.9);

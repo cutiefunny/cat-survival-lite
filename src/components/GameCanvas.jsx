@@ -1,7 +1,5 @@
 import { onMount, onCleanup, createSignal, createEffect, Show } from 'solid-js';
 import { useSkills } from './SkillsContext';
-// [삭제] 여기서 static import를 하면 Phaser 로드 전에 실행되어 에러가 납니다.
-// import VirtualJoystickPlugin from 'phaser3-rex-plugins/plugins/virtualjoystick-plugin.js';
 
 import ShopModal from './ShopModal';
 import GameOverModal from './GameOverModal';
@@ -16,12 +14,14 @@ export default function GameCanvas(props) {
   const [currentScore, setCurrentScore] = createSignal(0);
   const [currentLevel, setCurrentLevel] = createSignal(1);
   const [finalScore, setFinalScore] = createSignal(0);
+  
+  // [신규] 하악질 스킬 사용 가능 여부 (버튼 표시용)
+  const [isShockwaveReady, setIsShockwaveReady] = createSignal(false);
 
   let isActionBtnPressed = false;
   let gameContainer;
   let game = null;
 
-  // --- 스킬 동기화 및 능력치 적용 Effect ---
   createEffect(() => {
     const currentSkills = skills();
 
@@ -71,6 +71,7 @@ export default function GameCanvas(props) {
     setCurrentScore(0);
     setCurrentLevel(1);
     setFinalScore(0);
+    setIsShockwaveReady(false); // 재시작 시 버튼 숨김
     
     setShowGameOverModal(false);
     setShowShopModal(false);
@@ -81,22 +82,23 @@ export default function GameCanvas(props) {
     }
   };
 
-  const handleActionTouch = (e) => {
+  const handleActionStart = (e) => {
     if (e.cancelable) e.preventDefault();
     e.stopPropagation();
+    isActionBtnPressed = true;
+    if (game) {
+        const scene = game.scene.getScene('MainScene');
+        if (scene) scene.data.set('isActionBtnPressed', true);
+    }
+  };
 
-    if (e.type === 'touchstart') {
-        isActionBtnPressed = true;
-        if (game) {
-             const scene = game.scene.getScene('MainScene');
-             if (scene) scene.data.set('isActionBtnPressed', true);
-        }
-    } else if (e.type === 'touchend' || e.type === 'touchcancel') {
-        isActionBtnPressed = false;
-        if (game) {
-             const scene = game.scene.getScene('MainScene');
-             if (scene) scene.data.set('isActionBtnPressed', false);
-        }
+  const handleActionEnd = (e) => {
+    if (e.cancelable) e.preventDefault();
+    e.stopPropagation();
+    isActionBtnPressed = false;
+    if (game) {
+        const scene = game.scene.getScene('MainScene');
+        if (scene) scene.data.set('isActionBtnPressed', false);
     }
   };
 
@@ -109,13 +111,9 @@ export default function GameCanvas(props) {
   });
 
   onMount(async () => {
-    // 1. Phaser 모듈 로드
     const Phaser = await import('phaser');
-
-    // [중요] Rex Plugin이 Phaser를 찾을 수 있도록 전역 변수에 할당
     window.Phaser = Phaser.default || Phaser;
 
-    // 2. Phaser 로드 후 플러그인 동적 import
     const { default: VirtualJoystickPlugin } = await import('phaser3-rex-plugins/plugins/virtualjoystick-plugin.js');
 
     const config = {
@@ -132,7 +130,7 @@ export default function GameCanvas(props) {
       plugins: {
         global: [{
             key: 'rexVirtualJoystick',
-            plugin: VirtualJoystickPlugin, // 동적으로 로드된 플러그인 사용
+            plugin: VirtualJoystickPlugin,
             start: true
         }]
       },
@@ -161,6 +159,11 @@ export default function GameCanvas(props) {
             setCurrentScore(score);
         });
 
+        // [신규] MainScene에서 React(Solid) UI 상태를 변경할 수 있도록 함수 전달
+        scene.data.set('setShockwaveReady', (isReady) => {
+            setIsShockwaveReady(isReady);
+        });
+
         scene.data.set('skills', skills());
         scene.data.set('isActionBtnPressed', isActionBtnPressed);
     });
@@ -172,13 +175,16 @@ export default function GameCanvas(props) {
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div ref={gameContainer} style={{ width: '100%', height: '100%' }}></div>
 
-      {/* 액션 버튼 */}
-      <Show when={hasShockwaveSkill()}>
+      {/* [수정] 스킬이 있고 && 준비 완료(쿨타임 끝) 상태일 때만 버튼 표시 */}
+      <Show when={hasShockwaveSkill() && isShockwaveReady()}>
         <div 
             className="action-btn-container"
-            onTouchStart={handleActionTouch}
-            onTouchEnd={handleActionTouch}
-            onTouchCancel={handleActionTouch}
+            onTouchStart={handleActionStart}
+            onTouchEnd={handleActionEnd}
+            onTouchCancel={handleActionEnd}
+            onMouseDown={handleActionStart}
+            onMouseUp={handleActionEnd}
+            onMouseLeave={handleActionEnd}
         >
             <div className={`action-btn ${isActionBtnPressed ? 'active' : ''}`}>⚡</div>
         </div>
@@ -203,7 +209,7 @@ export default function GameCanvas(props) {
             display: none;
             position: absolute;
             bottom: 40px;
-            right: 40px;
+            right: 40px; 
             z-index: 50;
             opacity: 0.8;
             touch-action: none;
