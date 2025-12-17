@@ -2,6 +2,15 @@ import Phaser from 'phaser';
 import * as Config from '../constants/GameConfig';
 import levelSetting from '../assets/levelSetting.json';
 
+// [수정 1] src/assets 폴더에 있는 맵과 타일셋 이미지들을 import 합니다.
+// '?url'을 붙이면 빌드된 파일의 경로(해시 포함)를 문자열로 가져옵니다.
+import stage1MapUrl from '../assets/maps/stage1.json?url';
+import grassImgUrl from '../assets/tilesets/TX_Tileset_Grass.png?url';
+import treeImgUrl from '../assets/tilesets/TX_Plant.png?url';
+
+// (참고) 다른 이미지들도 src로 옮겼다면 아래처럼 추가하면 됩니다.
+// import playerSpriteUrl from '../assets/images/cat_walk_3frame_sprite.png?url';
+
 const levelExperience = levelSetting.levelExperience;
 
 export default class MainScene extends Phaser.Scene {
@@ -10,6 +19,7 @@ export default class MainScene extends Phaser.Scene {
     }
 
     preload() {
+        // [참고] src로 옮기지 않은 파일들(public 폴더)은 기존처럼 절대 경로('/') 사용
         this.load.spritesheet('player_sprite', '/images/cat_walk_3frame_sprite.png', { frameWidth: 100, frameHeight: 100 });
         this.load.image('cat_punch', '/images/cat_punch.png');
         this.load.image('cat_hit', '/images/cat_hit.png');
@@ -20,25 +30,23 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('cat_cry', '/images/cat_cry.png');
         this.load.image('cat_haak', '/images/cat_haak.png');
 
-        this.load.image('grass_img', '/assets/tilesets/TX_Tileset_Grass.png');
-        this.load.image('tree_img', '/assets/tilesets/TX_Plant.png');
-        this.load.tilemapTiledJSON('stage1_map', '/assets/maps/stage1.json');
+        // [수정 2] import한 변수(URL)를 사용하여 로드
+        this.load.image('grass_img', grassImgUrl);
+        this.load.image('tree_img', treeImgUrl);
+        this.load.tilemapTiledJSON('stage1_map', stage1MapUrl);
     }
 
     create() {
-        // [수정] 배경색을 회색으로 설정 (타일 로드 실패 시 배경과 구분하기 위함)
         this.cameras.main.setBackgroundColor('#808080');
-
         this.data.set('gameOver', false);
         this.physics.resume();
 
-        // 1. Tiled 맵 로드 및 동적 타일셋 연결
+        // --- 맵 로드 및 타일셋 연결 ---
         const map = this.make.tilemap({ key: 'stage1_map' });
         
-        // JSON 데이터에 저장된 타일셋 이름을 가져옵니다.
-        // 순서: 보통 0번이 지형(Grass), 1번이 장식/벽(Plant)입니다.
-        let grassTilesetName = 'tile_grass'; // 기본값
-        let plantTilesetName = 'tile_tree';  // 기본값
+        // JSON에서 타일셋 이름 가져오기
+        let grassTilesetName = 'tile_grass';
+        let plantTilesetName = 'tile_tree';
 
         if (map.tilesets.length > 0) {
             grassTilesetName = map.tilesets[0].name;
@@ -47,18 +55,14 @@ export default class MainScene extends Phaser.Scene {
             }
         }
 
-        // 실제 로드된 이름을 사용하여 이미지 연결
+        // 로드한 이미지 키('grass_img', 'tree_img')와 연결
+        // 이렇게 하면 JSON 내부의 이미지 경로가 달라도 문제없습니다.
         const grassTileset = map.addTilesetImage(grassTilesetName, 'grass_img');
         const plantTileset = map.addTilesetImage(plantTilesetName, 'tree_img');
 
-        // [디버그] 연결 상태 출력 (문제 해결 후 주석 처리 가능)
-        console.log(`Map Loaded: Grass='${grassTilesetName}'(${grassTileset ? 'OK' : 'FAIL'}), Plant='${plantTilesetName}'(${plantTileset ? 'OK' : 'FAIL'})`);
+        // 디버깅 로그 (필요 시 주석 제거)
+        // console.log(`Map Loaded: Grass='${grassTilesetName}', Plant='${plantTilesetName}'`);
 
-        if (!grassTileset || !plantTileset) {
-            console.error("타일셋 로드 실패! JSON 파일의 타일셋 이름과 코드가 일치하지 않습니다.");
-        }
-
-        // 레이어 생성 (이름 불일치 대비 Fallback 추가)
         const groundLayer = map.createLayer('grass', grassTileset, 0, 0) || map.createLayer('Ground', grassTileset, 0, 0);
         const wallLayer = map.createLayer('Walls', plantTileset, 0, 0);
 
@@ -69,14 +73,19 @@ export default class MainScene extends Phaser.Scene {
         this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
         this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
 
-        // 2. 애니메이션
+        // ... (이하 코드 동일) ...
+        
+        // 2. 애니메이션 생성
         this.anims.create({ key: 'cat_walk', frames: this.anims.generateFrameNumbers('player_sprite', { start: 0, end: 2 }), frameRate: 10, repeat: -1 });
         this.anims.create({ key: 'mouse_walk', frames: this.anims.generateFrameNumbers('mouse_enemy_sprite', { start: 0, end: 1 }), frameRate: 8, repeat: -1 });
         this.anims.create({ key: 'dog_walk', frames: this.anims.generateFrameNumbers('dog_enemy_sprite', { start: 0, end: 1 }), frameRate: 6, repeat: -1 });
         this.anims.create({ key: 'fish_swim', frames: this.anims.generateFrameNumbers('fish_item_sprite', { start: 0, end: 1 }), frameRate: 4, repeat: -1 });
         this.anims.create({ key: 'butterfly_fly', frames: this.anims.generateFrameNumbers('butterfly_sprite_3frame', { start: 0, end: 2 }), frameRate: 8, repeat: -1 });
 
-        // 3. 플레이어
+        // ... (나머지 create 및 update 코드는 기존 그대로 유지) ...
+        // (플레이어 생성, UI 설정, 오브젝트 생성, 충돌 설정 등)
+        
+        // [중략: 기존 코드와 동일]
         const player = this.physics.add.sprite(map.widthInPixels / 2, map.heightInPixels / 2, 'player_sprite');
         if (wallLayer) this.physics.add.collider(player, wallLayer);
         player.setDrag(500);
@@ -107,7 +116,12 @@ export default class MainScene extends Phaser.Scene {
                 fixed: true
             });
         }
-
+        
+        // ... (이후 UI, 입력, 충돌 등 나머지 코드는 기존과 완벽히 동일합니다)
+        // MainScene.js의 나머지 부분을 그대로 붙여넣으시면 됩니다.
+        
+        // (편의를 위해 생략했지만, 이전 답변의 전체 코드에서 위 import 부분과 preload 부분만 바꿔주시면 됩니다.)
+        
         // 4. UI 설정
         const energyBarBg = this.add.graphics();
         const expBarBg = this.add.graphics();
