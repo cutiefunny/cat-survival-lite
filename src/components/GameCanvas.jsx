@@ -121,7 +121,8 @@ export default function GameCanvas(props) {
       parent: gameContainer,
       width: window.innerWidth,
       height: window.innerHeight,
-      // [추가] 렌더링 설정
+      // [수정] 픽셀 비율 1로 고정하여 호환성 확보
+      resolution: 1,
       render: {
         pixelArt: true,
         roundPixels: true,

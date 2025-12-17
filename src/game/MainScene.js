@@ -26,6 +26,8 @@ export default class MainScene extends Phaser.Scene {
     }
 
     create() {
+        this.cameras.main.setBackgroundColor('#808080');
+
         this.data.set('gameOver', false);
         this.physics.resume();
 
