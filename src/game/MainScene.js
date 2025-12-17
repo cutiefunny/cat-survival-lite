@@ -2,14 +2,10 @@ import Phaser from 'phaser';
 import * as Config from '../constants/GameConfig';
 import levelSetting from '../assets/levelSetting.json';
 
-// [수정 1] src/assets 폴더에 있는 맵과 타일셋 이미지들을 import 합니다.
-// '?url'을 붙이면 빌드된 파일의 경로(해시 포함)를 문자열로 가져옵니다.
+// [Vite Asset Import] 맵과 타일셋 이미지를 import로 불러와 캐싱 문제 해결
 import stage1MapUrl from '../assets/maps/stage1.json?url';
 import grassImgUrl from '../assets/tilesets/TX_Tileset_Grass.png?url';
 import treeImgUrl from '../assets/tilesets/TX_Plant.png?url';
-
-// (참고) 다른 이미지들도 src로 옮겼다면 아래처럼 추가하면 됩니다.
-// import playerSpriteUrl from '../assets/images/cat_walk_3frame_sprite.png?url';
 
 const levelExperience = levelSetting.levelExperience;
 
@@ -19,7 +15,7 @@ export default class MainScene extends Phaser.Scene {
     }
 
     preload() {
-        // [참고] src로 옮기지 않은 파일들(public 폴더)은 기존처럼 절대 경로('/') 사용
+        // 일반 이미지 로드
         this.load.spritesheet('player_sprite', '/images/cat_walk_3frame_sprite.png', { frameWidth: 100, frameHeight: 100 });
         this.load.image('cat_punch', '/images/cat_punch.png');
         this.load.image('cat_hit', '/images/cat_hit.png');
@@ -30,7 +26,7 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('cat_cry', '/images/cat_cry.png');
         this.load.image('cat_haak', '/images/cat_haak.png');
 
-        // [수정 2] import한 변수(URL)를 사용하여 로드
+        // [변경] import한 URL 사용
         this.load.image('grass_img', grassImgUrl);
         this.load.image('tree_img', treeImgUrl);
         this.load.tilemapTiledJSON('stage1_map', stage1MapUrl);
@@ -41,10 +37,9 @@ export default class MainScene extends Phaser.Scene {
         this.data.set('gameOver', false);
         this.physics.resume();
 
-        // --- 맵 로드 및 타일셋 연결 ---
+        // 1. Tiled 맵 로드 (동적 이름 매칭)
         const map = this.make.tilemap({ key: 'stage1_map' });
         
-        // JSON에서 타일셋 이름 가져오기
         let grassTilesetName = 'tile_grass';
         let plantTilesetName = 'tile_tree';
 
@@ -55,13 +50,8 @@ export default class MainScene extends Phaser.Scene {
             }
         }
 
-        // 로드한 이미지 키('grass_img', 'tree_img')와 연결
-        // 이렇게 하면 JSON 내부의 이미지 경로가 달라도 문제없습니다.
         const grassTileset = map.addTilesetImage(grassTilesetName, 'grass_img');
         const plantTileset = map.addTilesetImage(plantTilesetName, 'tree_img');
-
-        // 디버깅 로그 (필요 시 주석 제거)
-        // console.log(`Map Loaded: Grass='${grassTilesetName}', Plant='${plantTilesetName}'`);
 
         const groundLayer = map.createLayer('grass', grassTileset, 0, 0) || map.createLayer('Ground', grassTileset, 0, 0);
         const wallLayer = map.createLayer('Walls', plantTileset, 0, 0);
@@ -73,19 +63,14 @@ export default class MainScene extends Phaser.Scene {
         this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
         this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
 
-        // ... (이하 코드 동일) ...
-        
-        // 2. 애니메이션 생성
+        // 2. 애니메이션
         this.anims.create({ key: 'cat_walk', frames: this.anims.generateFrameNumbers('player_sprite', { start: 0, end: 2 }), frameRate: 10, repeat: -1 });
         this.anims.create({ key: 'mouse_walk', frames: this.anims.generateFrameNumbers('mouse_enemy_sprite', { start: 0, end: 1 }), frameRate: 8, repeat: -1 });
         this.anims.create({ key: 'dog_walk', frames: this.anims.generateFrameNumbers('dog_enemy_sprite', { start: 0, end: 1 }), frameRate: 6, repeat: -1 });
         this.anims.create({ key: 'fish_swim', frames: this.anims.generateFrameNumbers('fish_item_sprite', { start: 0, end: 1 }), frameRate: 4, repeat: -1 });
         this.anims.create({ key: 'butterfly_fly', frames: this.anims.generateFrameNumbers('butterfly_sprite_3frame', { start: 0, end: 2 }), frameRate: 8, repeat: -1 });
 
-        // ... (나머지 create 및 update 코드는 기존 그대로 유지) ...
-        // (플레이어 생성, UI 설정, 오브젝트 생성, 충돌 설정 등)
-        
-        // [중략: 기존 코드와 동일]
+        // 3. 플레이어
         const player = this.physics.add.sprite(map.widthInPixels / 2, map.heightInPixels / 2, 'player_sprite');
         if (wallLayer) this.physics.add.collider(player, wallLayer);
         player.setDrag(500);
@@ -103,7 +88,7 @@ export default class MainScene extends Phaser.Scene {
         const finalPlayerScale = 0.5 * (isMobile ? 0.7 : 1.0);
         player.setScale(finalPlayerScale);
 
-        // --- 가상 조이스틱 (왼쪽 하단) ---
+        // --- 가상 조이스틱 ---
         if (isMobile) {
             this.joyStick = this.plugins.get('rexVirtualJoystick').add(this, {
                 x: 120,
@@ -116,12 +101,7 @@ export default class MainScene extends Phaser.Scene {
                 fixed: true
             });
         }
-        
-        // ... (이후 UI, 입력, 충돌 등 나머지 코드는 기존과 완벽히 동일합니다)
-        // MainScene.js의 나머지 부분을 그대로 붙여넣으시면 됩니다.
-        
-        // (편의를 위해 생략했지만, 이전 답변의 전체 코드에서 위 import 부분과 preload 부분만 바꿔주시면 됩니다.)
-        
+
         // 4. UI 설정
         const energyBarBg = this.add.graphics();
         const expBarBg = this.add.graphics();
@@ -208,7 +188,7 @@ export default class MainScene extends Phaser.Scene {
         this.input.addPointer(2); 
         this.cameras.main.startFollow(player, true, 0.05, 0.05);
 
-        // 6. 충돌
+        // 6. 충돌 및 스폰 이벤트
         const mice = this.data.get('mice');
         const dogs = this.data.get('dogs');
         const fishItems = this.data.get('fishItems');
@@ -235,9 +215,13 @@ export default class MainScene extends Phaser.Scene {
         this.time.addEvent({ delay: Config.DOG_SPAWN_INTERVAL_MS, callback: this.spawnDogVillain, callbackScope: this, loop: true });
         this.time.addEvent({ delay: Config.FISH_SPAWN_INTERVAL_MS, callback: this.spawnFishItem, callbackScope: this, loop: true });
         this.time.addEvent({ delay: Config.BUTTERFLY_SPAWN_INTERVAL_MS, callback: this.spawnButterflyVillain, callbackScope: this, loop: true });
+
+        // [핵심 수정] 씬 생성 완료 이벤트 발송
+        // GameCanvas가 이 이벤트를 듣고 UI 연결 함수를 다시 주입합니다.
+        this.game.events.emit('main-scene-ready', this);
     }
 
-    // [신규] UI 업데이트 헬퍼 함수
+    // [이하 update 및 헬퍼 메서드들은 기존과 동일합니다. 생략 없이 그대로 사용하세요.]
     updateShockwaveUI(isReady) {
         const setShockwaveReady = this.data.get('setShockwaveReady');
         if (setShockwaveReady) {
@@ -258,10 +242,9 @@ export default class MainScene extends Phaser.Scene {
         const hasShockwave = skills.includes(Config.SHOCKWAVE_SKILL_ID);
         const shockwaveCooldownText = this.data.get('shockwaveCooldownText');
 
-        // 스킬 보유 시 초기화 로직
         if (hasShockwave && this.data.get('shockwaveReady') === undefined) {
              this.data.set('shockwaveReady', false);
-             this.updateShockwaveUI(false); // [UI] 버튼 숨김
+             this.updateShockwaveUI(false); 
              this.startShockwaveCooldown(Config.SHOCKWAVE_INTERVAL_MS || 10000);
         }
 
@@ -284,9 +267,8 @@ export default class MainScene extends Phaser.Scene {
 
                  if (trigger) {
                      this.triggerShockwave(player);
-                     // 스킬 사용 후 쿨타임 시작 및 UI 숨김
                      this.data.set('shockwaveReady', false);
-                     this.updateShockwaveUI(false); // [UI] 버튼 숨김
+                     this.updateShockwaveUI(false); 
                      this.startShockwaveCooldown(Config.SHOCKWAVE_INTERVAL_MS || 10000);
                  }
              } else {
@@ -416,7 +398,7 @@ export default class MainScene extends Phaser.Scene {
             delay: duration,
             callback: () => {
                  this.data.set('shockwaveReady', true);
-                 this.updateShockwaveUI(true); // [UI] 쿨타임 끝 -> 버튼 표시
+                 this.updateShockwaveUI(true); 
                  this.data.set('shockwaveTimerEvent', null);
             },
             callbackScope: this,
