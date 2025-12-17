@@ -20,8 +20,8 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('cat_cry', '/images/cat_cry.png');
         this.load.image('cat_haak', '/images/cat_haak.png');
 
-        this.load.image('grass_img', '/assets/tilesets/TX Tileset Grass.png');
-        this.load.image('tree_img', '/assets/tilesets/TX Plant.png');
+        this.load.image('grass_img', '/assets/tilesets/TX_Tileset_Grass.png');
+        this.load.image('tree_img', '/assets/tilesets/TX_Plant.png');
         this.load.tilemapTiledJSON('stage1_map', '/assets/maps/stage1.json');
     }
 
