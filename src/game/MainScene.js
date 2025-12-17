@@ -171,6 +171,18 @@ export default class MainScene extends Phaser.Scene {
         this.input.addPointer(2); 
         this.cameras.main.startFollow(player, true, 0.05, 0.05);
 
+        // [DEBUG] 모바일 디버그용 텍스트 추가 (화면 좌측 상단)
+        this.debugText = this.add.text(10, 80, 'Initializing Debug...', {
+            fontSize: '14px',
+            color: '#ffffff',
+            backgroundColor: '#00000088', // 반투명 검은 배경
+            stroke: '#000000',
+            strokeThickness: 2,
+            fontFamily: 'monospace'
+        });
+        this.debugText.setScrollFactor(0); // 카메라 따라 다니지 않게 고정
+        this.debugText.setDepth(100);      // 가장 위에 표시
+
         // 6. 충돌
         const mice = this.data.get('mice');
         const dogs = this.data.get('dogs');
@@ -367,6 +379,26 @@ export default class MainScene extends Phaser.Scene {
                 bf.setFlipX(bf.body.velocity.x < 0);
             }
         });
+
+        // [DEBUG] 디버그 정보 실시간 업데이트
+        if (this.debugText) {
+            const player = this.data.get('player');
+            const grassTex = this.textures.get('grass_img');
+            const treeTex = this.textures.get('tree_img');
+            const rendererType = this.game.renderer.type === Phaser.WEBGL ? 'WebGL' : 'Canvas';
+            
+            this.debugText.setText([
+                `FPS: ${this.game.loop.actualFps.toFixed(1)}`,
+                `Renderer: ${rendererType}`,
+                `Mobile: ${this.data.get('isMobile')}`,
+                `Screen: ${window.innerWidth} x ${window.innerHeight}`,
+                `PixelRatio: ${window.devicePixelRatio}`,
+                `Grass Tex: ${grassTex.key} (Valid: ${grassTex.key !== '__MISSING'})`,
+                `Grass Size: ${grassTex.getSourceImage().width}x${grassTex.getSourceImage().height}`,
+                `Tree Tex: ${treeTex.key} (Valid: ${treeTex.key !== '__MISSING'})`,
+                `Player Pos: ${player ? Math.floor(player.x) + ',' + Math.floor(player.y) : 'N/A'}`
+            ]);
+        }
     }
 
     startShockwaveCooldown(duration) {
