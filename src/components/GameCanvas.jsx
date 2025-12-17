@@ -125,7 +125,7 @@ export default function GameCanvas(props) {
       render: {
         pixelArt: true,
         roundPixels: true,
-        precision: 'highp', // 모바일에서 고정밀도 강제 설정
+        precision: 'mediump', // 모바일에서 고정밀도 강제 설정
         antialias: false,
         powerPreference: 'high-performance'
       },
