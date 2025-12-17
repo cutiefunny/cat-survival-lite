@@ -117,7 +117,7 @@ export default function GameCanvas(props) {
     const { default: VirtualJoystickPlugin } = await import('phaser3-rex-plugins/plugins/virtualjoystick-plugin.js');
 
     const config = {
-      type: Phaser.AUTO,
+      type: Phaser.CANVAS,
       parent: gameContainer,
       width: window.innerWidth,
       height: window.innerHeight,
