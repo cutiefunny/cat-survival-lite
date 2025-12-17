@@ -91,8 +91,9 @@ export default class MainScene extends Phaser.Scene {
         // --- 가상 조이스틱 ---
         if (isMobile) {
             this.joyStick = this.plugins.get('rexVirtualJoystick').add(this, {
-                x: 120,
-                y: this.cameras.main.height - 120,
+                // [수정] 왼쪽(120) -> 오른쪽(화면 너비 - 120)
+                x: this.cameras.main.width - 100, 
+                y: this.cameras.main.height - 100,
                 radius: 60,
                 base: this.add.circle(0, 0, 60, 0x888888, 0.5),
                 thumb: this.add.circle(0, 0, 30, 0xcccccc, 0.8),

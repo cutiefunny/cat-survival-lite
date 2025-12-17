@@ -15,7 +15,6 @@ export default function GameCanvas(props) {
   const [currentLevel, setCurrentLevel] = createSignal(1);
   const [finalScore, setFinalScore] = createSignal(0);
   
-  // [신규] 하악질 스킬 사용 가능 여부 (버튼 표시용)
   const [isShockwaveReady, setIsShockwaveReady] = createSignal(false);
 
   let isActionBtnPressed = false;
@@ -71,7 +70,7 @@ export default function GameCanvas(props) {
     setCurrentScore(0);
     setCurrentLevel(1);
     setFinalScore(0);
-    setIsShockwaveReady(false); // 재시작 시 버튼 숨김
+    setIsShockwaveReady(false);
     
     setShowGameOverModal(false);
     setShowShopModal(false);
@@ -121,12 +120,11 @@ export default function GameCanvas(props) {
       parent: gameContainer,
       width: window.innerWidth,
       height: window.innerHeight,
-      // [수정] 픽셀 비율 1로 고정하여 호환성 확보
       resolution: 1,
       render: {
         pixelArt: true,
         roundPixels: true,
-        precision: 'mediump', // 모바일에서 고정밀도 강제 설정
+        precision: 'mediump',
         antialias: false,
         powerPreference: 'high-performance'
       },
@@ -166,7 +164,6 @@ export default function GameCanvas(props) {
             setCurrentScore(score);
         });
 
-        // [신규] MainScene에서 React(Solid) UI 상태를 변경할 수 있도록 함수 전달
         scene.data.set('setShockwaveReady', (isReady) => {
             setIsShockwaveReady(isReady);
         });
@@ -182,7 +179,6 @@ export default function GameCanvas(props) {
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div ref={gameContainer} style={{ width: '100%', height: '100%' }}></div>
 
-      {/* [수정] 스킬이 있고 && 준비 완료(쿨타임 끝) 상태일 때만 버튼 표시 */}
       <Show when={hasShockwaveSkill() && isShockwaveReady()}>
         <div 
             className="action-btn-container"
@@ -216,7 +212,7 @@ export default function GameCanvas(props) {
             display: none;
             position: absolute;
             bottom: 40px;
-            right: 40px; 
+            left: 40px; /* [수정] right: 40px -> left: 40px (왼쪽 배치) */
             z-index: 50;
             opacity: 0.8;
             touch-action: none;
