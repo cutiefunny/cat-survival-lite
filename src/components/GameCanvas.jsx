@@ -121,8 +121,14 @@ export default function GameCanvas(props) {
       parent: gameContainer,
       width: window.innerWidth,
       height: window.innerHeight,
-      roundPixels: true,
-      pixelArt: true,
+      // [추가] 렌더링 설정
+      render: {
+        pixelArt: true,
+        roundPixels: true,
+        precision: 'highp', // 모바일에서 고정밀도 강제 설정
+        antialias: false,
+        powerPreference: 'high-performance'
+      },
       physics: {
         default: 'arcade',
         arcade: { gravity: { x: 0, y: 0 }, debug: false }
