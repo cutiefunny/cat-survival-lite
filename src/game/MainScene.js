@@ -89,7 +89,6 @@ export default class MainScene extends Phaser.Scene {
         // --- 가상 조이스틱 ---
         if (isMobile) {
             this.joyStick = this.plugins.get('rexVirtualJoystick').add(this, {
-                // [확인] 오른쪽 배치: 화면 너비 - 여백(120)
                 x: this.cameras.main.width - 120, 
                 y: this.cameras.main.height - 120,
                 radius: 60,
@@ -215,7 +214,21 @@ export default class MainScene extends Phaser.Scene {
         this.time.addEvent({ delay: Config.FISH_SPAWN_INTERVAL_MS, callback: this.spawnFishItem, callbackScope: this, loop: true });
         this.time.addEvent({ delay: Config.BUTTERFLY_SPAWN_INTERVAL_MS, callback: this.spawnButterflyVillain, callbackScope: this, loop: true });
 
-        // [핵심] 씬 생성 완료 이벤트 발송
+        // [핵심 1] 맵에서 'Spawns' 오브젝트 레이어 읽기
+        // Tiled에서 'Spawns'라는 이름의 Object Layer를 만들고, 
+        // 그 안에 'fish'라는 이름의 객체를 배치해야 합니다.
+        const spawnLayer = map.getObjectLayer('Spawns');
+        
+        if (spawnLayer && spawnLayer.objects) {
+            spawnLayer.objects.forEach(obj => {
+                if (obj.name === 'fish') {
+                    // Tiled 객체 좌표를 이용해 생선 생성 (강제 스폰)
+                    this.spawnFishItem(obj.x, obj.y);
+                }
+            });
+        }
+
+        // 씬 생성 완료 이벤트 발송
         this.game.events.emit('main-scene-ready', this);
     }
 
@@ -419,9 +432,18 @@ export default class MainScene extends Phaser.Scene {
         this.spawnEntity(dogs, 'dog_enemy_sprite', 'dog_walk', 0.5); 
     }
 
-    spawnFishItem() { 
+    // [핵심 2] spawnFishItem 수정: 좌표가 있으면 강제 스폰
+    spawnFishItem(x = null, y = null) { 
         if (this.data.get('gameOver')) return;
         const items = this.data.get('fishItems');
+
+        // [추가] 맵에서 지정된 위치에 스폰 (좌표가 있을 경우 확률 무시)
+        if (x !== null && y !== null) {
+            this.spawnEntity(items, 'fish_item_sprite', 'fish_swim', 0.4, true, x, y);
+            return;
+        }
+
+        // 기존 랜덤 스폰
         if (Math.random() < Config.FISH_SPAWN_PROBABILITY && items.countActive(true) < 2) {
             this.spawnEntity(items, 'fish_item_sprite', 'fish_swim', 0.4, true); 
         }
@@ -438,30 +460,34 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
-    spawnEntity(group, spriteKey, animKey, scaleBase, isStatic = false) {
+    // [핵심 3] spawnEntity 수정: x, y 좌표를 받아 처리하도록 변경
+    spawnEntity(group, spriteKey, animKey, scaleBase, isStatic = false, x = null, y = null) {
         const cam = this.cameras.main;
         const pad = 100;
-        let x, y;
         const worldBounds = this.physics.world.bounds;
         const boundMargin = 50; 
-        let attempts = 0;
-        let validPosition = false;
+        
+        // 좌표가 없을 때만(랜덤 스폰) 위치 계산 로직 실행
+        if (x === null || y === null) {
+            let attempts = 0;
+            let validPosition = false;
 
-        while (!validPosition && attempts < 10) {
-            attempts++;
-            if (isStatic) { 
-                x = Phaser.Math.Between(cam.worldView.left, cam.worldView.right);
-                y = Phaser.Math.Between(cam.worldView.top, cam.worldView.bottom);
-            } else { 
-                const side = Phaser.Math.Between(0, 3);
-                if (side === 0) { x = Phaser.Math.Between(cam.scrollX, cam.scrollX + cam.width); y = cam.scrollY - pad; }
-                else if (side === 1) { x = Phaser.Math.Between(cam.scrollX, cam.scrollX + cam.width); y = cam.scrollY + cam.height + pad; }
-                else if (side === 2) { x = cam.scrollX - pad; y = Phaser.Math.Between(cam.scrollY, cam.scrollY + cam.height); }
-                else { x = cam.scrollX + cam.width + pad; y = Phaser.Math.Between(cam.scrollY, cam.scrollY + cam.height); }
+            while (!validPosition && attempts < 10) {
+                attempts++;
+                if (isStatic) { 
+                    x = Phaser.Math.Between(cam.worldView.left, cam.worldView.right);
+                    y = Phaser.Math.Between(cam.worldView.top, cam.worldView.bottom);
+                } else { 
+                    const side = Phaser.Math.Between(0, 3);
+                    if (side === 0) { x = Phaser.Math.Between(cam.scrollX, cam.scrollX + cam.width); y = cam.scrollY - pad; }
+                    else if (side === 1) { x = Phaser.Math.Between(cam.scrollX, cam.scrollX + cam.width); y = cam.scrollY + cam.height + pad; }
+                    else if (side === 2) { x = cam.scrollX - pad; y = Phaser.Math.Between(cam.scrollY, cam.scrollY + cam.height); }
+                    else { x = cam.scrollX + cam.width + pad; y = Phaser.Math.Between(cam.scrollY, cam.scrollY + cam.height); }
+                }
+                x = Phaser.Math.Clamp(x, worldBounds.x + boundMargin, worldBounds.width - boundMargin);
+                y = Phaser.Math.Clamp(y, worldBounds.y + boundMargin, worldBounds.height - boundMargin);
+                validPosition = true; 
             }
-            x = Phaser.Math.Clamp(x, worldBounds.x + boundMargin, worldBounds.width - boundMargin);
-            y = Phaser.Math.Clamp(y, worldBounds.y + boundMargin, worldBounds.height - boundMargin);
-            validPosition = true; 
         }
 
         const entity = group.get(x, y, spriteKey);
