@@ -2,6 +2,9 @@ import Phaser from 'phaser';
 import * as Config from '../constants/GameConfig';
 import levelSetting from '../assets/levelSetting.json';
 
+// [신규] 스테이지 정보 파일 Import
+import stageInfo from '../assets/stageInfo.json';
+
 // [Vite Asset Import]
 import stage1MapUrl from '../assets/maps/stage1.json?url';
 import grassImgUrl from '../assets/tilesets/TX_Tileset_Grass.png?url';
@@ -34,6 +37,12 @@ export default class MainScene extends Phaser.Scene {
         this.cameras.main.setBackgroundColor('#808080');
         this.data.set('gameOver', false);
         this.physics.resume();
+
+        // [스테이지 변수 초기화]
+        this.currentStage = 1;
+        this.stageMiceKilled = 0;
+        this.stageMiceTotal = 0;
+        this.stageButterflySpawned = false; // [신규] 나비 중복 스폰 방지 플래그
 
         // 1. 맵 로드
         const map = this.make.tilemap({ key: 'stage1_map' });
@@ -74,6 +83,8 @@ export default class MainScene extends Phaser.Scene {
         player.setDrag(500);
         player.setDepth(1);
         player.setCollideWorldBounds(true);
+        player.body.setSize(60, 50); 
+        player.body.setOffset(20, 50);
         
         player.setData('level', 1);
         player.setData('experience', 0);
@@ -131,6 +142,7 @@ export default class MainScene extends Phaser.Scene {
             const energyY = 20; 
             const expY = energyY + Config.ENERGY_BAR_HEIGHT + 5;
 
+            // [체력 바]
             const currentEnergy = player.getData('energy');
             const maxEnergy = player.getData('maxEnergy');
             const energyPercent = Phaser.Math.Clamp(currentEnergy / maxEnergy, 0, 1);
@@ -143,37 +155,31 @@ export default class MainScene extends Phaser.Scene {
             energyBarFill.fillStyle(0x00ff00, 1);
             energyBarFill.fillRect(barX, energyY, Config.ENERGY_BAR_WIDTH * energyPercent, Config.ENERGY_BAR_HEIGHT);
 
-            const currentExp = player.getData('experience');
-            const currentLvl = player.getData('level');
-            const nextLvlExp = levelExperience[String(currentLvl + 1)] || 999999;
-            const prevLvlExp = levelExperience[String(currentLvl)] || 0;
-            
-            let expPercent = 0;
-            if (nextLvlExp > prevLvlExp) {
-                expPercent = (currentExp - prevLvlExp) / (nextLvlExp - prevLvlExp);
-            }
-            expPercent = Phaser.Math.Clamp(expPercent, 0, 1);
+            // [스테이지 진행도 바]
+            const totalMice = this.stageMiceTotal || 1; 
+            const killedMice = this.stageMiceKilled || 0;
+            const progressPercent = Phaser.Math.Clamp(killedMice / totalMice, 0, 1);
 
             expBarBg.clear();
             expBarBg.fillStyle(0x000000, 0.5);
             expBarBg.fillRect(barX, expY, Config.EXP_BAR_WIDTH, Config.EXP_BAR_HEIGHT);
 
             expBarFill.clear();
-            expBarFill.fillStyle(0xffff00, 1);
-            expBarFill.fillRect(barX, expY, Config.EXP_BAR_WIDTH * expPercent, Config.EXP_BAR_HEIGHT);
+            expBarFill.fillStyle(0xffff00, 1); 
+            expBarFill.fillRect(barX, expY, Config.EXP_BAR_WIDTH * progressPercent, Config.EXP_BAR_HEIGHT);
         };
 
         this.data.set('drawUI', drawUI);
         drawUI(); 
         
         player.on('changedata-energy', drawUI);
-        player.on('changedata-experience', drawUI);
-        player.on('changedata-level', drawUI);
 
         // 5. 오브젝트 및 입력
         this.data.set('player', player);
-        this.data.set('mice', this.physics.add.group());
-        this.data.set('dogs', this.physics.add.group());
+        const mice = this.physics.add.group();
+        const dogs = this.physics.add.group();
+        this.data.set('mice', mice);
+        this.data.set('dogs', dogs);
         this.data.set('fishItems', this.physics.add.group());
         this.data.set('butterflies', this.physics.add.group());
         this.data.set('cursors', this.input.keyboard.createCursorKeys());
@@ -187,8 +193,6 @@ export default class MainScene extends Phaser.Scene {
         this.cameras.main.startFollow(player, true, 0.05, 0.05);
 
         // 6. 충돌 및 스폰 이벤트
-        const mice = this.data.get('mice');
-        const dogs = this.data.get('dogs');
         const fishItems = this.data.get('fishItems');
         const butterflies = this.data.get('butterflies');
 
@@ -209,27 +213,69 @@ export default class MainScene extends Phaser.Scene {
         this.physics.add.overlap(player, fishItems, this.collectFish, null, this);
         this.physics.add.overlap(player, butterflies, this.collectButterfly, null, this);
         
-        this.time.addEvent({ delay: Config.MOUSE_SPAWN_INTERVAL_MS, callback: this.spawnMouseVillain, callbackScope: this, loop: true });
-        this.time.addEvent({ delay: Config.DOG_SPAWN_INTERVAL_MS, callback: this.spawnDogVillain, callbackScope: this, loop: true });
-        this.time.addEvent({ delay: Config.FISH_SPAWN_INTERVAL_MS, callback: this.spawnFishItem, callbackScope: this, loop: true });
-        this.time.addEvent({ delay: Config.BUTTERFLY_SPAWN_INTERVAL_MS, callback: this.spawnButterflyVillain, callbackScope: this, loop: true });
+        // [수정] 랜덤 스폰 타이머 관리
+        // 1. 고등어(Fish): 랜덤 생성 제거 (맵 지정 위치에서만 생성)
+        // this.time.addEvent({ delay: Config.FISH_SPAWN_INTERVAL_MS, callback: this.spawnFishItem, ... }); // 제거됨
 
-        // [핵심 1] 맵에서 'Spawns' 오브젝트 레이어 읽기
-        // Tiled에서 'Spawns'라는 이름의 Object Layer를 만들고, 
-        // 그 안에 'fish'라는 이름의 객체를 배치해야 합니다.
+        // 2. 나비(Butterfly): 10초마다 10% 확률, 스테이지당 1마리 제한
+        this.time.addEvent({ 
+            delay: 10000, // 10초
+            callback: () => {
+                if (this.data.get('gameOver')) return;
+                // 스테이지당 1마리 생성 여부 체크 && 10% 확률
+                if (!this.stageButterflySpawned && Math.random() < 0.1) {
+                    this.spawnButterflyVillain();
+                    this.stageButterflySpawned = true; // 생성됨 표시
+                }
+            }, 
+            callbackScope: this, 
+            loop: true 
+        });
+
+        // 1스테이지 시작 (적 일괄 생성)
+        this.startStage(this.currentStage);
+
+        // [고등어 맵 스폰] 맵에 정의된 'fish' 위치에만 생성
         const spawnLayer = map.getObjectLayer('Spawns');
-        
         if (spawnLayer && spawnLayer.objects) {
             spawnLayer.objects.forEach(obj => {
                 if (obj.name === 'fish') {
-                    // Tiled 객체 좌표를 이용해 생선 생성 (강제 스폰)
+                    // x, y 좌표를 전달하여 강제 생성
                     this.spawnFishItem(obj.x, obj.y);
                 }
             });
         }
 
-        // 씬 생성 완료 이벤트 발송
         this.game.events.emit('main-scene-ready', this);
+    }
+
+    startStage(stageNum) {
+        console.log(`Starting Stage ${stageNum}`);
+        
+        // 정보 로드
+        const stageData = stageInfo[stageNum] || { mouse: 20, dog: 10 };
+        this.stageMiceTotal = stageData.mouse;
+        const stageDogsTotal = stageData.dog;
+        this.stageMiceKilled = 0; 
+        
+        // [신규] 나비 스폰 플래그 초기화 (새 스테이지마다 기회 제공)
+        this.stageButterflySpawned = false;
+
+        // 적 초기화 및 생성
+        const mice = this.data.get('mice');
+        const dogs = this.data.get('dogs');
+        mice.clear(true, true);
+        dogs.clear(true, true);
+
+        for (let i = 0; i < this.stageMiceTotal; i++) {
+            this.spawnEntity(mice, 'mouse_enemy_sprite', 'mouse_walk', 0.32);
+        }
+        for (let i = 0; i < stageDogsTotal; i++) {
+            this.spawnEntity(dogs, 'dog_enemy_sprite', 'dog_walk', 0.5);
+        }
+
+        const drawUI = this.data.get('drawUI');
+        if (drawUI) drawUI();
     }
 
     updateShockwaveUI(isReady) {
@@ -293,7 +339,7 @@ export default class MainScene extends Phaser.Scene {
              shockwaveCooldownText.setVisible(false);
         }
 
-        // --- 이동 로직 ---
+        // --- 플레이어 이동 ---
         let speed = Config.BASE_PLAYER_SPEED;
         if (skills && skills.includes(21)) speed *= 1.1;
 
@@ -349,18 +395,23 @@ export default class MainScene extends Phaser.Scene {
             }
         }
 
-        // --- 적 AI 로직 ---
+        // --- 적 AI 로직 (속도 다양화 적용) ---
         const mice = this.data.get('mice');
         mice.getChildren().forEach(mouse => {
             if (mouse.active && mouse.body) {
                 const distSq = Phaser.Math.Distance.Squared(player.x, player.y, mouse.x, mouse.y);
-                const gatherSpeed = 70;
+                
+                // [수정] 쥐마다 부여된 랜덤 속도 계수(speedFactor) 적용
+                const baseSpeed = 70;
+                const speedFactor = mouse.getData('speedFactor') || 1; 
+                const finalSpeed = baseSpeed * speedFactor;
+
                 if (distSq < Config.FLEE_RADIUS_SQ) {
                     const fleeX = mouse.x - (player.x - mouse.x);
                     const fleeY = mouse.y - (player.y - mouse.y);
-                    this.physics.moveToObject(mouse, { x: fleeX, y: fleeY }, gatherSpeed);
+                    this.physics.moveToObject(mouse, { x: fleeX, y: fleeY }, finalSpeed);
                 } else if (distSq > Config.GATHERING_RADIUS_SQ) {
-                    this.physics.moveToObject(mouse, player, gatherSpeed);
+                    this.physics.moveToObject(mouse, player, finalSpeed);
                 }
                 mouse.setFlipX(mouse.body.velocity.x > 0);
             }
@@ -369,7 +420,12 @@ export default class MainScene extends Phaser.Scene {
         const dogs = this.data.get('dogs');
         dogs.getChildren().forEach(dog => {
             if (dog.active && dog.body && !dog.isKnockedBack && !dog.isStunned) {
-                this.physics.moveToObject(dog, player, Config.DOG_CHASE_SPEED);
+                // [수정] 개마다 부여된 랜덤 속도 계수 적용
+                const baseSpeed = Config.DOG_CHASE_SPEED;
+                const speedFactor = dog.getData('speedFactor') || 1;
+                const finalSpeed = baseSpeed * speedFactor;
+
+                this.physics.moveToObject(dog, player, finalSpeed);
                 dog.setFlipX(dog.body.velocity.x > 0);
             }
         });
@@ -421,53 +477,40 @@ export default class MainScene extends Phaser.Scene {
     spawnMouseVillain() {
         if (this.data.get('gameOver')) return;
         const mice = this.data.get('mice');
-        if (mice.countActive(true) >= Config.MAX_ACTIVE_MICE) return;
         this.spawnEntity(mice, 'mouse_enemy_sprite', 'mouse_walk', 0.32); 
     }
 
     spawnDogVillain() {
         if (this.data.get('gameOver')) return;
         const dogs = this.data.get('dogs');
-        if (dogs.countActive(true) >= Config.MAX_ACTIVE_DOGS) return;
         this.spawnEntity(dogs, 'dog_enemy_sprite', 'dog_walk', 0.5); 
     }
 
-    // [핵심 2] spawnFishItem 수정: 좌표가 있으면 강제 스폰
     spawnFishItem(x = null, y = null) { 
         if (this.data.get('gameOver')) return;
         const items = this.data.get('fishItems');
-
-        // [추가] 맵에서 지정된 위치에 스폰 (좌표가 있을 경우 확률 무시)
+        // [수정] 랜덤 생성 로직 제거하고, 좌표가 있을 때만 생성
         if (x !== null && y !== null) {
             this.spawnEntity(items, 'fish_item_sprite', 'fish_swim', 0.4, true, x, y);
-            return;
-        }
-
-        // 기존 랜덤 스폰
-        if (Math.random() < Config.FISH_SPAWN_PROBABILITY && items.countActive(true) < 2) {
-            this.spawnEntity(items, 'fish_item_sprite', 'fish_swim', 0.4, true); 
         }
     }
     
     spawnButterflyVillain() { 
         if (this.data.get('gameOver')) return;
         const items = this.data.get('butterflies');
-        if (Math.random() < Config.BUTTERFLY_SPAWN_PROBABILITY && items.countActive(true) < 1) {
-            const butterfly = this.spawnEntity(items, 'butterfly_sprite_3frame', 'butterfly_fly', 0.5, false);
-            if (butterfly && butterfly.body) {
-                 butterfly.setImmovable(true);
-            }
+        // 스테이지당 1마리 제한은 타이머에서 체크하므로 여기서는 생성만 담당
+        const butterfly = this.spawnEntity(items, 'butterfly_sprite_3frame', 'butterfly_fly', 0.5, false);
+        if (butterfly && butterfly.body) {
+             butterfly.setImmovable(true);
         }
     }
 
-    // [핵심 3] spawnEntity 수정: x, y 좌표를 받아 처리하도록 변경
     spawnEntity(group, spriteKey, animKey, scaleBase, isStatic = false, x = null, y = null) {
         const cam = this.cameras.main;
         const pad = 100;
         const worldBounds = this.physics.world.bounds;
         const boundMargin = 50; 
         
-        // 좌표가 없을 때만(랜덤 스폰) 위치 계산 로직 실행
         if (x === null || y === null) {
             let attempts = 0;
             let validPosition = false;
@@ -499,12 +542,30 @@ export default class MainScene extends Phaser.Scene {
         const scaleFactor = isMobile ? 0.7 : 1.0;
         entity.setScale(scaleBase * scaleFactor);
         entity.play(animKey);
+
+        // [신규] 빌런(동적 엔티티)에게 랜덤 속도 계수 부여 (0.8 ~ 1.2배)
+        if (!isStatic) {
+            entity.setData('speedFactor', Phaser.Math.FloatBetween(0.8, 1.2));
+        }
+
         if (isStatic) {
             entity.setImmovable(true);
             entity.setCollideWorldBounds(false);
+            if (entity.width) {
+                 entity.body.setSize(entity.width * 0.6, entity.height * 0.6);
+                 entity.body.setOffset(entity.width * 0.2, entity.height * 0.2);
+            }
         } else {
             entity.setBounce(0.2);
             entity.setCollideWorldBounds(true);
+            
+            if (spriteKey === 'dog_enemy_sprite') {
+                entity.body.setSize(70, 50);
+                entity.body.setOffset(15, 50);
+            } else if (spriteKey === 'mouse_enemy_sprite') {
+                entity.body.setSize(60, 30);
+                entity.body.setOffset(20, 34);
+            }
         }
         return entity;
     }
@@ -522,18 +583,24 @@ export default class MainScene extends Phaser.Scene {
         const updateScoreUI = this.data.get('updateScoreUI');
         if (updateScoreUI) updateScoreUI(score);
 
-        let exp = player.getData('experience') + 10;
-        player.setData('experience', exp);
-        
-        const currentLvl = player.getData('level');
-        const nextLvlExp = levelExperience[String(currentLvl + 1)];
-        
-        if (nextLvlExp !== undefined && exp >= nextLvlExp) {
-            const newLevel = currentLvl + 1;
-            player.setData('level', newLevel);
-            const openShopModal = this.data.get('openShopModal');
-            if (openShopModal) openShopModal(newLevel, score);
+        this.stageMiceKilled += 1;
+
+        const drawUI = this.data.get('drawUI');
+        if (drawUI) drawUI();
+
+        if (this.stageMiceKilled >= this.stageMiceTotal) {
+            this.clearStage();
         }
+    }
+
+    clearStage() {
+        console.log('Stage Cleared!');
+        const openShopModal = this.data.get('openShopModal');
+        if (openShopModal) {
+            openShopModal(this.currentStage, this.data.get('score')); 
+        }
+        this.currentStage += 1;
+        this.startStage(this.currentStage);
     }
 
     hitDog(player, dog) {
