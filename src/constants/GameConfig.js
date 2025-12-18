@@ -14,6 +14,12 @@ export const PLAYER_PUSH_BACK_FORCE = 300;
 export const KNOCKBACK_DURATION_MS = 250;
 export const PLAYER_INVINCIBILITY_DURATION_MS = 500;
 
+// [신규] 점프 설정
+export const JUMP_DURATION_MS = 600;      // 점프 체류 시간
+export const JUMP_HEIGHT_PIXEL = 60;      // 점프 시각적 높이 (Y축 오프셋)
+export const JUMP_COOLDOWN_MS = 800;      // 점프 연속 사용 방지 쿨타임
+export const JUMP_SPEED_MULTIPLIER = 1.5; // 점프 시 이동 속도 가중치 (1.5배 멀리 뜀)
+
 // --- 적(Villain) 설정 ---
 export const MOUSE_SPAWN_INTERVAL_MS = 1000;
 export const MAX_ACTIVE_MICE = 30;
@@ -49,5 +55,4 @@ export const SHOCKWAVE_COLOR = 0xADD8E6;
 export const SHOCKWAVE_LINE_WIDTH = 10;
 
 // --- 런타임 공유 데이터 ---
-// (타일 색상은 런타임에 생성되지만, 전역적으로 유지되어야 하므로 이곳에 둡니다)
 export const TILE_COLORS = [];

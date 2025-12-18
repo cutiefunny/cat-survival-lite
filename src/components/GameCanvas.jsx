@@ -146,9 +146,6 @@ export default function GameCanvas(props) {
     window.addEventListener('resize', handleResize);
 
     game.events.on('ready', () => {
-        // MainScene에서 이벤트를 받아 처리하는 방식이 더 안전할 수 있지만,
-        // 현재 구조상 game.events.on('ready') 시점에는 Scene이 완전히 준비되지 않았을 수 있습니다.
-        // 따라서 MainScene.js에서 발송하는 'main-scene-ready' 이벤트를 리스닝합니다.
         game.events.on('main-scene-ready', (scene) => {
             scene.data.set('openShopModal', (level, score) => {
                 setCurrentLevel(level);
@@ -182,7 +179,12 @@ export default function GameCanvas(props) {
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div ref={gameContainer} style={{ width: '100%', height: '100%' }}></div>
 
-      <Show when={hasShockwaveSkill() && isShockwaveReady()}>
+      {/* [수정] 액션 버튼 (점프/하악질) 표시 로직 
+          - 스킬이 없으면 항상 표시 (점프)
+          - 스킬이 있으면 준비되었을 때만 표시 (하악질)하거나 항상 표시 후 시각적 차이 등
+            (요청사항: 하악질 획득 시 대체됨)
+      */}
+      <Show when={!hasShockwaveSkill() || isShockwaveReady()}>
         <div 
             className="action-btn-container"
             onTouchStart={handleActionStart}
@@ -192,7 +194,10 @@ export default function GameCanvas(props) {
             onMouseUp={handleActionEnd}
             onMouseLeave={handleActionEnd}
         >
-            <div className={`action-btn ${isActionBtnPressed ? 'active' : ''}`}>⚡</div>
+            <div className={`action-btn ${isActionBtnPressed ? 'active' : ''}`}>
+                {/* 하악질 스킬이 있으면 번개, 없으면 점프(화살표) */}
+                {hasShockwaveSkill() ? '⚡' : '⬆️'}
+            </div>
         </div>
       </Show>
 
@@ -212,10 +217,12 @@ export default function GameCanvas(props) {
 
       <style>{`
         .action-btn-container {
-            display: none;
+            /* [기본] 항상 표시 (모바일이 아닌 경우에도 테스트를 위해 보이게 할 수 있음) */
+            /* 현재 로직은 hover: none (모바일) 일때만 보이게 설정되어 있음 */
+            display: none; 
             position: absolute;
             bottom: 40px;
-            left: 40px; /* [확인] 왼쪽 배치 */
+            left: 40px; /* 왼쪽에 배치 */
             z-index: 50;
             opacity: 0.8;
             touch-action: none;
@@ -234,6 +241,9 @@ export default function GameCanvas(props) {
             background-color: rgba(255, 100, 100, 0.8);
             transform: scale(0.95);
         }
+        /* [수정] 점프 버튼은 기본적으로 필요하므로 데스크탑에서도 보일 수 있게 할지, 
+           아니면 모바일 환경 에뮬레이션에서만 보일지 결정. 
+           일단 기존 로직(모바일 감지) 유지하되, 필요시 display: block으로 변경 가능 */
         @media (hover: none) and (pointer: coarse) {
             .action-btn-container { display: block; }
         }

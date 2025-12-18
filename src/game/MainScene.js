@@ -42,7 +42,10 @@ export default class MainScene extends Phaser.Scene {
         this.currentStage = 1;
         this.stageMiceKilled = 0;
         this.stageMiceTotal = 0;
-        this.stageButterflySpawned = false; // [신규] 나비 중복 스폰 방지 플래그
+        this.stageButterflySpawned = false; 
+
+        // [신규] 점프 상태 변수
+        this.data.set('isJumping', false);
 
         // 1. 맵 로드
         const map = this.make.tilemap({ key: 'stage1_map' });
@@ -79,8 +82,14 @@ export default class MainScene extends Phaser.Scene {
 
         // 3. 플레이어
         const player = this.physics.add.sprite(map.widthInPixels / 2, map.heightInPixels / 2, 'player_sprite');
-        if (wallLayer) this.physics.add.collider(player, wallLayer);
-        player.setDrag(500);
+        
+        // [수정] 벽 충돌체를 변수로 저장하여 점프 시 제어 가능하게 함
+        this.wallCollider = null;
+        if (wallLayer) {
+            this.wallCollider = this.physics.add.collider(player, wallLayer);
+        }
+
+        player.setDrag(500); // 평소에는 마찰력 적용
         player.setDepth(1);
         player.setCollideWorldBounds(true);
         player.body.setSize(60, 50); 
@@ -96,6 +105,7 @@ export default class MainScene extends Phaser.Scene {
         this.data.set('isMobile', isMobile);
         const finalPlayerScale = 0.5 * (isMobile ? 0.7 : 1.0);
         player.setScale(finalPlayerScale);
+        player.setData('baseScale', finalPlayerScale); // 원래 스케일 저장
 
         // --- 가상 조이스틱 ---
         if (isMobile) {
@@ -201,8 +211,12 @@ export default class MainScene extends Phaser.Scene {
             this.physics.add.collider(dogs, wallLayer);
         }
 
-        this.physics.add.collider(player, mice, this.hitMouse, null, this);
-        this.physics.add.collider(player, dogs, this.hitDog, null, this);
+        // [수정] 적과의 충돌에 processCallback 추가 (점프 시 통과 로직)
+        // 3번째 인자: 충돌 시 실행할 함수 (hitMouse/hitDog)
+        // 4번째 인자: 충돌 검사 전 실행할 함수 (processCallback) -> 여기서 false 반환 시 충돌 무시
+        this.physics.add.collider(player, mice, this.hitMouse, this.canPlayerCollide, this);
+        this.physics.add.collider(player, dogs, this.hitDog, this.canPlayerCollide, this);
+
         this.physics.add.collider(mice, mice);
         this.physics.add.collider(dogs, dogs);
         this.physics.add.collider(dogs, mice);
@@ -213,34 +227,28 @@ export default class MainScene extends Phaser.Scene {
         this.physics.add.overlap(player, fishItems, this.collectFish, null, this);
         this.physics.add.overlap(player, butterflies, this.collectButterfly, null, this);
         
-        // [수정] 랜덤 스폰 타이머 관리
-        // 1. 고등어(Fish): 랜덤 생성 제거 (맵 지정 위치에서만 생성)
-        // this.time.addEvent({ delay: Config.FISH_SPAWN_INTERVAL_MS, callback: this.spawnFishItem, ... }); // 제거됨
-
-        // 2. 나비(Butterfly): 10초마다 10% 확률, 스테이지당 1마리 제한
+        // 2. 나비(Butterfly)
         this.time.addEvent({ 
             delay: 10000, // 10초
             callback: () => {
                 if (this.data.get('gameOver')) return;
-                // 스테이지당 1마리 생성 여부 체크 && 10% 확률
                 if (!this.stageButterflySpawned && Math.random() < 0.1) {
                     this.spawnButterflyVillain();
-                    this.stageButterflySpawned = true; // 생성됨 표시
+                    this.stageButterflySpawned = true; 
                 }
             }, 
             callbackScope: this, 
             loop: true 
         });
 
-        // 1스테이지 시작 (적 일괄 생성)
+        // 1스테이지 시작
         this.startStage(this.currentStage);
 
-        // [고등어 맵 스폰] 맵에 정의된 'fish' 위치에만 생성
+        // [고등어 맵 스폰]
         const spawnLayer = map.getObjectLayer('Spawns');
         if (spawnLayer && spawnLayer.objects) {
             spawnLayer.objects.forEach(obj => {
                 if (obj.name === 'fish') {
-                    // x, y 좌표를 전달하여 강제 생성
                     this.spawnFishItem(obj.x, obj.y);
                 }
             });
@@ -258,7 +266,6 @@ export default class MainScene extends Phaser.Scene {
         const stageDogsTotal = stageData.dog;
         this.stageMiceKilled = 0; 
         
-        // [신규] 나비 스폰 플래그 초기화 (새 스테이지마다 기회 제공)
         this.stageButterflySpawned = false;
 
         // 적 초기화 및 생성
@@ -285,6 +292,11 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
+    // [신규] 충돌 여부 검사 (점프 중에는 적 통과)
+    canPlayerCollide(player, enemy) {
+        return !this.data.get('isJumping');
+    }
+
     update(time, delta) {
         if (this.data.get('gameOver')) return;
         
@@ -293,60 +305,28 @@ export default class MainScene extends Phaser.Scene {
 
         if (!player || !cursors) return;
 
-        // --- 스킬 쿨타임 로직 ---
         const skills = this.data.get('skills') || [];
         const hasShockwave = skills.includes(Config.SHOCKWAVE_SKILL_ID);
         const shockwaveCooldownText = this.data.get('shockwaveCooldownText');
 
+        // --- 스킬 쿨타임 초기화 ---
         if (hasShockwave && this.data.get('shockwaveReady') === undefined) {
              this.data.set('shockwaveReady', false);
              this.updateShockwaveUI(false); 
              this.startShockwaveCooldown(Config.SHOCKWAVE_INTERVAL_MS || 10000);
         }
 
-        if (hasShockwave && shockwaveCooldownText) {
-             shockwaveCooldownText.setPosition(player.x, player.y - (player.displayHeight / 2) * player.scaleY - 40);
-             shockwaveCooldownText.setVisible(true);
-             
-             const isReady = this.data.get('shockwaveReady');
-
-             if (isReady) {
-                 shockwaveCooldownText.setText('⚡');
-                 let trigger = false;
-                 
-                 const spaceKey = this.data.get('spaceKey');
-                 if (Phaser.Input.Keyboard.JustDown(spaceKey)) trigger = true;
-                 if (this.input.activePointer.rightButtonDown()) trigger = true;
-                 
-                 const isActionBtnPressed = this.data.get('isActionBtnPressed');
-                 if (isActionBtnPressed) trigger = true;
-
-                 if (trigger) {
-                     this.triggerShockwave(player);
-                     this.data.set('shockwaveReady', false);
-                     this.updateShockwaveUI(false); 
-                     this.startShockwaveCooldown(Config.SHOCKWAVE_INTERVAL_MS || 10000);
-                 }
-             } else {
-                 const timer = this.data.get('shockwaveTimerEvent');
-                 if (timer) {
-                     const remain = timer.getRemaining(); 
-                     const remainSec = Math.ceil(remain / 1000);
-                     shockwaveCooldownText.setText(remainSec);
-                 }
-             }
-        } else if (shockwaveCooldownText) {
-             shockwaveCooldownText.setVisible(false);
-        }
-
-        // --- 플레이어 이동 ---
+        // ============================================================
+        // [순서 유지] 플레이어 이동 로직 (점프보다 먼저 실행)
+        // ============================================================
         let speed = Config.BASE_PLAYER_SPEED;
         if (skills && skills.includes(21)) speed *= 1.1;
 
-        let isMoving = false;
         const isKnockedBack = this.data.get('isKnockedBack');
+        const isJumping = this.data.get('isJumping');
+        let isMoving = false;
 
-        if (!isKnockedBack) {
+        if (!isKnockedBack && !isJumping) {
             let moveX = 0;
             let moveY = 0;
 
@@ -376,32 +356,96 @@ export default class MainScene extends Phaser.Scene {
             } else {
                 player.setVelocity(0);
             }
+        } else if (isJumping) {
+            // 점프 중에는 속도 유지 (Drag가 0이므로 감속되지 않음)
+            // 애니메이션 처리를 위해 움직임 여부만 체크
+            if (player.body.velocity.length() > 10) {
+                isMoving = true;
+            }
         }
 
+        // ============================================================
+        // [통합 입력 및 액션 처리]
+        // ============================================================
+        let triggerAction = false;
+        
+        // 1. 스페이스바 확인
+        const spaceKey = this.data.get('spaceKey');
+        if (Phaser.Input.Keyboard.JustDown(spaceKey)) triggerAction = true;
+        
+        // 2. 모바일/UI 액션 버튼 확인
+        const isActionBtnPressed = this.data.get('isActionBtnPressed');
+        if (isActionBtnPressed) {
+            triggerAction = true;
+        }
+
+        if (triggerAction) {
+            if (hasShockwave) {
+                // [하악질 스킬 보유 시]
+                if (shockwaveCooldownText) {
+                    shockwaveCooldownText.setPosition(player.x, player.y - (player.displayHeight / 2) * player.scaleY - 40);
+                    shockwaveCooldownText.setVisible(true);
+                }
+
+                const isReady = this.data.get('shockwaveReady');
+                if (isReady) {
+                    this.triggerShockwave(player);
+                    this.data.set('shockwaveReady', false);
+                    this.updateShockwaveUI(false); 
+                    this.startShockwaveCooldown(Config.SHOCKWAVE_INTERVAL_MS || 10000);
+                }
+            } else {
+                // [하악질 스킬 미보유 시] -> 점프 발동
+                if (!this.data.get('isJumping')) {
+                    this.triggerJump(player);
+                }
+            }
+        }
+
+        // --- 쿨타임 텍스트 업데이트 (스킬 보유 시에만) ---
+        if (hasShockwave && shockwaveCooldownText) {
+             shockwaveCooldownText.setPosition(player.x, player.y - (player.displayHeight / 2) * player.scaleY - 40);
+             shockwaveCooldownText.setVisible(true);
+             const isReady = this.data.get('shockwaveReady');
+             
+             if (isReady) {
+                 shockwaveCooldownText.setText('⚡');
+             } else {
+                 const timer = this.data.get('shockwaveTimerEvent');
+                 if (timer) {
+                     const remain = timer.getRemaining(); 
+                     const remainSec = Math.ceil(remain / 1000);
+                     shockwaveCooldownText.setText(remainSec);
+                 }
+             }
+        } else if (shockwaveCooldownText) {
+             shockwaveCooldownText.setVisible(false);
+        }
+
+        // --- 플레이어 애니메이션 업데이트 ---
         const isInvincible = player.getData('isInvincible');
         const isHaak = this.data.get('isHaak');
-
+        
         if (isInvincible) {
             player.setTexture('cat_hit');
         } else if (isHaak) {
             player.setTexture('cat_haak');
         } else {
-            if (isMoving) {
+            if (isMoving && !isJumping) {
                 player.anims.play('cat_walk', true);
             } else {
+                // 점프 중에는 걷기 애니메이션 멈춤
                 player.anims.stop();
-                player.setTexture('player_sprite'); 
+                if (!isJumping) player.setTexture('player_sprite'); 
                 player.setFrame(0);
             }
         }
 
-        // --- 적 AI 로직 (속도 다양화 적용) ---
+        // --- 적 AI 로직 ---
         const mice = this.data.get('mice');
         mice.getChildren().forEach(mouse => {
             if (mouse.active && mouse.body) {
                 const distSq = Phaser.Math.Distance.Squared(player.x, player.y, mouse.x, mouse.y);
-                
-                // [수정] 쥐마다 부여된 랜덤 속도 계수(speedFactor) 적용
                 const baseSpeed = 70;
                 const speedFactor = mouse.getData('speedFactor') || 1; 
                 const finalSpeed = baseSpeed * speedFactor;
@@ -420,7 +464,6 @@ export default class MainScene extends Phaser.Scene {
         const dogs = this.data.get('dogs');
         dogs.getChildren().forEach(dog => {
             if (dog.active && dog.body && !dog.isKnockedBack && !dog.isStunned) {
-                // [수정] 개마다 부여된 랜덤 속도 계수 적용
                 const baseSpeed = Config.DOG_CHASE_SPEED;
                 const speedFactor = dog.getData('speedFactor') || 1;
                 const finalSpeed = baseSpeed * speedFactor;
@@ -450,6 +493,65 @@ export default class MainScene extends Phaser.Scene {
                     bf.setData('moveTimer', timer);
                 }
                 bf.setFlipX(bf.body.velocity.x < 0);
+            }
+        });
+    }
+
+    // [수정] 점프 기능 (displayOriginY를 사용하여 물리 좌표 고정 문제 해결)
+    triggerJump(player) {
+        if (this.data.get('isJumping')) return;
+        
+        const lastJumpTime = this.data.get('lastJumpTime') || 0;
+        const now = this.time.now;
+        if (now - lastJumpTime < Config.JUMP_COOLDOWN_MS) return;
+
+        this.data.set('isJumping', true);
+        this.data.set('lastJumpTime', now);
+
+        // 1. 벽 충돌 비활성화
+        if (this.wallCollider) {
+            this.wallCollider.active = false;
+        }
+
+        // 2. 물리적 도약 (속도 부스트)
+        const body = player.body;
+        if (body.velocity.length() > 10) {
+             const currentVel = body.velocity.clone();
+             const boost = Config.JUMP_SPEED_MULTIPLIER;
+             player.setVelocity(currentVel.x * boost, currentVel.y * boost);
+        }
+        
+        // 공중에서는 마찰력 제거 (관성 유지)
+        player.setDrag(0);
+
+        // 3. 점프 시각적 효과
+        // 중요: y좌표를 tween하면 물리 이동과 충돌하므로, displayOriginY(그림 중심점)를 변경하여 위로 띄웁니다.
+        const originalScale = player.getData('baseScale');
+        const jumpDuration = Config.JUMP_DURATION_MS;
+        const defaultOriginY = player.displayOriginY; // 보통 50 (height/2)
+
+        this.tweens.add({
+            targets: player,
+            // [핵심 수정] y 대신 displayOriginY를 변경. 
+            // displayOriginY가 커지면 텍스처가 기준점보다 위로 그려짐.
+            displayOriginY: defaultOriginY + Config.JUMP_HEIGHT_PIXEL, 
+            scaleX: originalScale * 1.2, 
+            scaleY: originalScale * 1.2,
+            duration: jumpDuration / 2,
+            yoyo: true, 
+            ease: 'Sine.easeInOut',
+            onComplete: () => {
+                this.data.set('isJumping', false);
+                player.setScale(originalScale);
+                player.setOrigin(0.5, 0.5); // origin 초기화 (혹시 모를 오차 방지)
+                
+                // 착지 후 마찰력 복구
+                player.setDrag(500); 
+
+                // 벽 충돌 다시 활성화
+                if (this.wallCollider) {
+                    this.wallCollider.active = true;
+                }
             }
         });
     }
@@ -489,7 +591,6 @@ export default class MainScene extends Phaser.Scene {
     spawnFishItem(x = null, y = null) { 
         if (this.data.get('gameOver')) return;
         const items = this.data.get('fishItems');
-        // [수정] 랜덤 생성 로직 제거하고, 좌표가 있을 때만 생성
         if (x !== null && y !== null) {
             this.spawnEntity(items, 'fish_item_sprite', 'fish_swim', 0.4, true, x, y);
         }
@@ -498,7 +599,6 @@ export default class MainScene extends Phaser.Scene {
     spawnButterflyVillain() { 
         if (this.data.get('gameOver')) return;
         const items = this.data.get('butterflies');
-        // 스테이지당 1마리 제한은 타이머에서 체크하므로 여기서는 생성만 담당
         const butterfly = this.spawnEntity(items, 'butterfly_sprite_3frame', 'butterfly_fly', 0.5, false);
         if (butterfly && butterfly.body) {
              butterfly.setImmovable(true);
@@ -543,7 +643,6 @@ export default class MainScene extends Phaser.Scene {
         entity.setScale(scaleBase * scaleFactor);
         entity.play(animKey);
 
-        // [신규] 빌런(동적 엔티티)에게 랜덤 속도 계수 부여 (0.8 ~ 1.2배)
         if (!isStatic) {
             entity.setData('speedFactor', Phaser.Math.FloatBetween(0.8, 1.2));
         }
@@ -572,6 +671,8 @@ export default class MainScene extends Phaser.Scene {
 
     hitMouse(player, mouse) {
         if (this.data.get('gameOver')) return;
+        // [참고] 충돌 무시는 processCallback(canPlayerCollide)에서 처리됨
+
         const mice = this.data.get('mice');
         mice.killAndHide(mouse);
         mouse.disableBody(true, true);
@@ -605,6 +706,7 @@ export default class MainScene extends Phaser.Scene {
 
     hitDog(player, dog) {
         if (this.data.get('gameOver')) return;
+        // [참고] 충돌 무시는 processCallback(canPlayerCollide)에서 처리됨
         if (player.getData('isInvincible')) return;
 
         const skills = this.data.get('skills') || [];
