@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import * as Config from '../constants/GameConfig';
 import levelSetting from '../assets/levelSetting.json';
 
-// [Vite Asset Import] 맵과 타일셋 이미지를 import로 불러와 캐싱 문제 해결
+// [Vite Asset Import]
 import stage1MapUrl from '../assets/maps/stage1.json?url';
 import grassImgUrl from '../assets/tilesets/TX_Tileset_Grass.png?url';
 import treeImgUrl from '../assets/tilesets/TX_Plant.png?url';
@@ -15,7 +15,6 @@ export default class MainScene extends Phaser.Scene {
     }
 
     preload() {
-        // 일반 이미지 로드
         this.load.spritesheet('player_sprite', '/images/cat_walk_3frame_sprite.png', { frameWidth: 100, frameHeight: 100 });
         this.load.image('cat_punch', '/images/cat_punch.png');
         this.load.image('cat_hit', '/images/cat_hit.png');
@@ -26,7 +25,6 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('cat_cry', '/images/cat_cry.png');
         this.load.image('cat_haak', '/images/cat_haak.png');
 
-        // [변경] import한 URL 사용
         this.load.image('grass_img', grassImgUrl);
         this.load.image('tree_img', treeImgUrl);
         this.load.tilemapTiledJSON('stage1_map', stage1MapUrl);
@@ -37,7 +35,7 @@ export default class MainScene extends Phaser.Scene {
         this.data.set('gameOver', false);
         this.physics.resume();
 
-        // 1. Tiled 맵 로드 (동적 이름 매칭)
+        // 1. 맵 로드
         const map = this.make.tilemap({ key: 'stage1_map' });
         
         let grassTilesetName = 'tile_grass';
@@ -91,9 +89,9 @@ export default class MainScene extends Phaser.Scene {
         // --- 가상 조이스틱 ---
         if (isMobile) {
             this.joyStick = this.plugins.get('rexVirtualJoystick').add(this, {
-                // [수정] 왼쪽(120) -> 오른쪽(화면 너비 - 120)
-                x: this.cameras.main.width - 100, 
-                y: this.cameras.main.height - 100,
+                // [확인] 오른쪽 배치: 화면 너비 - 여백(120)
+                x: this.cameras.main.width - 120, 
+                y: this.cameras.main.height - 120,
                 radius: 60,
                 base: this.add.circle(0, 0, 60, 0x888888, 0.5),
                 thumb: this.add.circle(0, 0, 30, 0xcccccc, 0.8),
@@ -217,12 +215,10 @@ export default class MainScene extends Phaser.Scene {
         this.time.addEvent({ delay: Config.FISH_SPAWN_INTERVAL_MS, callback: this.spawnFishItem, callbackScope: this, loop: true });
         this.time.addEvent({ delay: Config.BUTTERFLY_SPAWN_INTERVAL_MS, callback: this.spawnButterflyVillain, callbackScope: this, loop: true });
 
-        // [핵심 수정] 씬 생성 완료 이벤트 발송
-        // GameCanvas가 이 이벤트를 듣고 UI 연결 함수를 다시 주입합니다.
+        // [핵심] 씬 생성 완료 이벤트 발송
         this.game.events.emit('main-scene-ready', this);
     }
 
-    // [이하 update 및 헬퍼 메서드들은 기존과 동일합니다. 생략 없이 그대로 사용하세요.]
     updateShockwaveUI(isReady) {
         const setShockwaveReady = this.data.get('setShockwaveReady');
         if (setShockwaveReady) {

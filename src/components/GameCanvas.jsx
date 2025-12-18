@@ -146,30 +146,33 @@ export default function GameCanvas(props) {
     window.addEventListener('resize', handleResize);
 
     game.events.on('ready', () => {
-        const scene = game.scene.getScene('MainScene');
-        
-        scene.data.set('openShopModal', (level, score) => {
-            setCurrentLevel(level);
-            setCurrentScore(score);
-            setShowShopModal(true);
-            scene.scene.pause();
-        });
+        // MainScene에서 이벤트를 받아 처리하는 방식이 더 안전할 수 있지만,
+        // 현재 구조상 game.events.on('ready') 시점에는 Scene이 완전히 준비되지 않았을 수 있습니다.
+        // 따라서 MainScene.js에서 발송하는 'main-scene-ready' 이벤트를 리스닝합니다.
+        game.events.on('main-scene-ready', (scene) => {
+            scene.data.set('openShopModal', (level, score) => {
+                setCurrentLevel(level);
+                setCurrentScore(score);
+                setShowShopModal(true);
+                scene.scene.pause();
+            });
 
-        scene.data.set('triggerGameOverModal', (score) => {
-            setFinalScore(score);
-            setShowGameOverModal(true);
-        });
+            scene.data.set('triggerGameOverModal', (score) => {
+                setFinalScore(score);
+                setShowGameOverModal(true);
+            });
 
-        scene.data.set('updateScoreUI', (score) => {
-            setCurrentScore(score);
-        });
+            scene.data.set('updateScoreUI', (score) => {
+                setCurrentScore(score);
+            });
 
-        scene.data.set('setShockwaveReady', (isReady) => {
-            setIsShockwaveReady(isReady);
-        });
+            scene.data.set('setShockwaveReady', (isReady) => {
+                setIsShockwaveReady(isReady);
+            });
 
-        scene.data.set('skills', skills());
-        scene.data.set('isActionBtnPressed', isActionBtnPressed);
+            scene.data.set('skills', skills());
+            scene.data.set('isActionBtnPressed', isActionBtnPressed);
+        });
     });
   });
 
@@ -212,7 +215,7 @@ export default function GameCanvas(props) {
             display: none;
             position: absolute;
             bottom: 40px;
-            left: 40px; /* [수정] right: 40px -> left: 40px (왼쪽 배치) */
+            left: 40px; /* [확인] 왼쪽 배치 */
             z-index: 50;
             opacity: 0.8;
             touch-action: none;
