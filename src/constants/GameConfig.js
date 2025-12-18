@@ -14,11 +14,11 @@ export const PLAYER_PUSH_BACK_FORCE = 300;
 export const KNOCKBACK_DURATION_MS = 250;
 export const PLAYER_INVINCIBILITY_DURATION_MS = 500;
 
-// [신규] 점프 설정
-export const JUMP_DURATION_MS = 600;      // 점프 체류 시간
-export const JUMP_HEIGHT_PIXEL = 60;      // 점프 시각적 높이 (Y축 오프셋)
-export const JUMP_COOLDOWN_MS = 800;      // 점프 연속 사용 방지 쿨타임
-export const JUMP_SPEED_MULTIPLIER = 1.5; // 점프 시 이동 속도 가중치 (1.5배 멀리 뜀)
+// --- 점프 설정 ---
+export const JUMP_DURATION_MS = 600;
+export const JUMP_HEIGHT_PIXEL = 50;
+export const JUMP_COOLDOWN_MS = 800;
+export const JUMP_SPEED_MULTIPLIER = 1.5;
 
 // --- 적(Villain) 설정 ---
 export const MOUSE_SPAWN_INTERVAL_MS = 1000;
@@ -30,7 +30,17 @@ export const GATHERING_RADIUS_SQ = GATHERING_RADIUS * GATHERING_RADIUS;
 
 export const DOG_SPAWN_INTERVAL_MS = 2000;
 export const MAX_ACTIVE_DOGS = 20;
-export const DOG_CHASE_SPEED = BASE_PLAYER_SPEED * 0.3;
+export const DOG_CHASE_SPEED = BASE_PLAYER_SPEED * 0.3; // 일반 개 속도
+
+// [Type 1] 특수 추적 개체 (Smart/Fast)
+export const SPECIAL_DOG_RATIO = 0.2;        // 20%
+export const SPECIAL_DOG_SPEED_RATIO = 0.8;  
+
+// [Type 2] 매복형 개체 (Ambush/Patrol) - 신규 추가
+export const AMBUSH_DOG_RATIO = 0.2;         // 20%
+export const AMBUSH_DETECT_RADIUS = 350;     // 플레이어 감지 거리
+export const AMBUSH_RELEASE_RADIUS = 600;    // 추격 포기 거리
+export const AMBUSH_PATROL_RADIUS = 500;     // 배회 시 목표 지점 랜덤 반경
 
 // --- 아이템 및 기타 설정 ---
 export const FISH_SPAWN_INTERVAL_MS = 5000;

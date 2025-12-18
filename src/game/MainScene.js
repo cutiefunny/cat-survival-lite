@@ -1,11 +1,8 @@
 import Phaser from 'phaser';
 import * as Config from '../constants/GameConfig';
 import levelSetting from '../assets/levelSetting.json';
-
-// [신규] 스테이지 정보 파일 Import
 import stageInfo from '../assets/stageInfo.json';
 
-// [Vite Asset Import]
 import stage1MapUrl from '../assets/maps/stage1.json?url';
 import grassImgUrl from '../assets/tilesets/TX_Tileset_Grass.png?url';
 import treeImgUrl from '../assets/tilesets/TX_Plant.png?url';
@@ -38,16 +35,12 @@ export default class MainScene extends Phaser.Scene {
         this.data.set('gameOver', false);
         this.physics.resume();
 
-        // [스테이지 변수 초기화]
         this.currentStage = 1;
         this.stageMiceKilled = 0;
         this.stageMiceTotal = 0;
         this.stageButterflySpawned = false; 
-
-        // [신규] 점프 상태 변수
         this.data.set('isJumping', false);
 
-        // 1. 맵 로드
         const map = this.make.tilemap({ key: 'stage1_map' });
         
         let grassTilesetName = 'tile_grass';
@@ -73,23 +66,20 @@ export default class MainScene extends Phaser.Scene {
         this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
         this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
 
-        // 2. 애니메이션
         this.anims.create({ key: 'cat_walk', frames: this.anims.generateFrameNumbers('player_sprite', { start: 0, end: 2 }), frameRate: 10, repeat: -1 });
         this.anims.create({ key: 'mouse_walk', frames: this.anims.generateFrameNumbers('mouse_enemy_sprite', { start: 0, end: 1 }), frameRate: 8, repeat: -1 });
         this.anims.create({ key: 'dog_walk', frames: this.anims.generateFrameNumbers('dog_enemy_sprite', { start: 0, end: 1 }), frameRate: 6, repeat: -1 });
         this.anims.create({ key: 'fish_swim', frames: this.anims.generateFrameNumbers('fish_item_sprite', { start: 0, end: 1 }), frameRate: 4, repeat: -1 });
         this.anims.create({ key: 'butterfly_fly', frames: this.anims.generateFrameNumbers('butterfly_sprite_3frame', { start: 0, end: 2 }), frameRate: 8, repeat: -1 });
 
-        // 3. 플레이어
         const player = this.physics.add.sprite(map.widthInPixels / 2, map.heightInPixels / 2, 'player_sprite');
         
-        // [수정] 벽 충돌체를 변수로 저장하여 점프 시 제어 가능하게 함
         this.wallCollider = null;
         if (wallLayer) {
             this.wallCollider = this.physics.add.collider(player, wallLayer);
         }
 
-        player.setDrag(500); // 평소에는 마찰력 적용
+        player.setDrag(500); 
         player.setDepth(1);
         player.setCollideWorldBounds(true);
         player.body.setSize(60, 50); 
@@ -105,9 +95,8 @@ export default class MainScene extends Phaser.Scene {
         this.data.set('isMobile', isMobile);
         const finalPlayerScale = 0.5 * (isMobile ? 0.7 : 1.0);
         player.setScale(finalPlayerScale);
-        player.setData('baseScale', finalPlayerScale); // 원래 스케일 저장
+        player.setData('baseScale', finalPlayerScale); 
 
-        // --- 가상 조이스틱 ---
         if (isMobile) {
             this.joyStick = this.plugins.get('rexVirtualJoystick').add(this, {
                 x: this.cameras.main.width - 120, 
@@ -121,7 +110,6 @@ export default class MainScene extends Phaser.Scene {
             });
         }
 
-        // 4. UI 설정
         const energyBarBg = this.add.graphics();
         const expBarBg = this.add.graphics();
         const energyBarFill = this.add.graphics();
@@ -152,7 +140,6 @@ export default class MainScene extends Phaser.Scene {
             const energyY = 20; 
             const expY = energyY + Config.ENERGY_BAR_HEIGHT + 5;
 
-            // [체력 바]
             const currentEnergy = player.getData('energy');
             const maxEnergy = player.getData('maxEnergy');
             const energyPercent = Phaser.Math.Clamp(currentEnergy / maxEnergy, 0, 1);
@@ -165,7 +152,6 @@ export default class MainScene extends Phaser.Scene {
             energyBarFill.fillStyle(0x00ff00, 1);
             energyBarFill.fillRect(barX, energyY, Config.ENERGY_BAR_WIDTH * energyPercent, Config.ENERGY_BAR_HEIGHT);
 
-            // [스테이지 진행도 바]
             const totalMice = this.stageMiceTotal || 1; 
             const killedMice = this.stageMiceKilled || 0;
             const progressPercent = Phaser.Math.Clamp(killedMice / totalMice, 0, 1);
@@ -184,7 +170,6 @@ export default class MainScene extends Phaser.Scene {
         
         player.on('changedata-energy', drawUI);
 
-        // 5. 오브젝트 및 입력
         this.data.set('player', player);
         const mice = this.physics.add.group();
         const dogs = this.physics.add.group();
@@ -202,7 +187,6 @@ export default class MainScene extends Phaser.Scene {
         this.input.addPointer(2); 
         this.cameras.main.startFollow(player, true, 0.05, 0.05);
 
-        // 6. 충돌 및 스폰 이벤트
         const fishItems = this.data.get('fishItems');
         const butterflies = this.data.get('butterflies');
 
@@ -211,12 +195,8 @@ export default class MainScene extends Phaser.Scene {
             this.physics.add.collider(dogs, wallLayer);
         }
 
-        // [수정] 적과의 충돌에 processCallback 추가 (점프 시 통과 로직)
-        // 3번째 인자: 충돌 시 실행할 함수 (hitMouse/hitDog)
-        // 4번째 인자: 충돌 검사 전 실행할 함수 (processCallback) -> 여기서 false 반환 시 충돌 무시
         this.physics.add.collider(player, mice, this.hitMouse, this.canPlayerCollide, this);
         this.physics.add.collider(player, dogs, this.hitDog, this.canPlayerCollide, this);
-
         this.physics.add.collider(mice, mice);
         this.physics.add.collider(dogs, dogs);
         this.physics.add.collider(dogs, mice);
@@ -227,9 +207,8 @@ export default class MainScene extends Phaser.Scene {
         this.physics.add.overlap(player, fishItems, this.collectFish, null, this);
         this.physics.add.overlap(player, butterflies, this.collectButterfly, null, this);
         
-        // 2. 나비(Butterfly)
         this.time.addEvent({ 
-            delay: 10000, // 10초
+            delay: 10000,
             callback: () => {
                 if (this.data.get('gameOver')) return;
                 if (!this.stageButterflySpawned && Math.random() < 0.1) {
@@ -241,10 +220,8 @@ export default class MainScene extends Phaser.Scene {
             loop: true 
         });
 
-        // 1스테이지 시작
         this.startStage(this.currentStage);
 
-        // [고등어 맵 스폰]
         const spawnLayer = map.getObjectLayer('Spawns');
         if (spawnLayer && spawnLayer.objects) {
             spawnLayer.objects.forEach(obj => {
@@ -260,7 +237,6 @@ export default class MainScene extends Phaser.Scene {
     startStage(stageNum) {
         console.log(`Starting Stage ${stageNum}`);
         
-        // 정보 로드
         const stageData = stageInfo[stageNum] || { mouse: 20, dog: 10 };
         this.stageMiceTotal = stageData.mouse;
         const stageDogsTotal = stageData.dog;
@@ -268,7 +244,6 @@ export default class MainScene extends Phaser.Scene {
         
         this.stageButterflySpawned = false;
 
-        // 적 초기화 및 생성
         const mice = this.data.get('mice');
         const dogs = this.data.get('dogs');
         mice.clear(true, true);
@@ -277,8 +252,28 @@ export default class MainScene extends Phaser.Scene {
         for (let i = 0; i < this.stageMiceTotal; i++) {
             this.spawnEntity(mice, 'mouse_enemy_sprite', 'mouse_walk', 0.32);
         }
+
+        const specialCount = Math.floor(stageDogsTotal * Config.SPECIAL_DOG_RATIO);
+        const ambushCount = Math.floor(stageDogsTotal * Config.AMBUSH_DOG_RATIO);
+
         for (let i = 0; i < stageDogsTotal; i++) {
-            this.spawnEntity(dogs, 'dog_enemy_sprite', 'dog_walk', 0.5);
+            const dog = this.spawnEntity(dogs, 'dog_enemy_sprite', 'dog_walk', 0.5);
+            if (dog) {
+                if (i < specialCount) {
+                    dog.setData('isSpecial', true);
+                    dog.setData('isAmbush', false);
+                    dog.setTint(0xffaaaa); 
+                } else if (i < specialCount + ambushCount) {
+                    dog.setData('isSpecial', false);
+                    dog.setData('isAmbush', true);
+                    dog.setData('ambushState', 'patrol'); 
+                    dog.setData('patrolTarget', null);   
+                    dog.setTint(0xaaaaff); 
+                } else {
+                    dog.setData('isSpecial', false);
+                    dog.setData('isAmbush', false);
+                }
+            }
         }
 
         const drawUI = this.data.get('drawUI');
@@ -292,7 +287,6 @@ export default class MainScene extends Phaser.Scene {
         }
     }
 
-    // [신규] 충돌 여부 검사 (점프 중에는 적 통과)
     canPlayerCollide(player, enemy) {
         return !this.data.get('isJumping');
     }
@@ -309,16 +303,12 @@ export default class MainScene extends Phaser.Scene {
         const hasShockwave = skills.includes(Config.SHOCKWAVE_SKILL_ID);
         const shockwaveCooldownText = this.data.get('shockwaveCooldownText');
 
-        // --- 스킬 쿨타임 초기화 ---
         if (hasShockwave && this.data.get('shockwaveReady') === undefined) {
              this.data.set('shockwaveReady', false);
              this.updateShockwaveUI(false); 
              this.startShockwaveCooldown(Config.SHOCKWAVE_INTERVAL_MS || 10000);
         }
 
-        // ============================================================
-        // [순서 유지] 플레이어 이동 로직 (점프보다 먼저 실행)
-        // ============================================================
         let speed = Config.BASE_PLAYER_SPEED;
         if (skills && skills.includes(21)) speed *= 1.1;
 
@@ -357,23 +347,16 @@ export default class MainScene extends Phaser.Scene {
                 player.setVelocity(0);
             }
         } else if (isJumping) {
-            // 점프 중에는 속도 유지 (Drag가 0이므로 감속되지 않음)
-            // 애니메이션 처리를 위해 움직임 여부만 체크
             if (player.body.velocity.length() > 10) {
                 isMoving = true;
             }
         }
 
-        // ============================================================
-        // [통합 입력 및 액션 처리]
-        // ============================================================
         let triggerAction = false;
         
-        // 1. 스페이스바 확인
         const spaceKey = this.data.get('spaceKey');
         if (Phaser.Input.Keyboard.JustDown(spaceKey)) triggerAction = true;
         
-        // 2. 모바일/UI 액션 버튼 확인
         const isActionBtnPressed = this.data.get('isActionBtnPressed');
         if (isActionBtnPressed) {
             triggerAction = true;
@@ -381,7 +364,6 @@ export default class MainScene extends Phaser.Scene {
 
         if (triggerAction) {
             if (hasShockwave) {
-                // [하악질 스킬 보유 시]
                 if (shockwaveCooldownText) {
                     shockwaveCooldownText.setPosition(player.x, player.y - (player.displayHeight / 2) * player.scaleY - 40);
                     shockwaveCooldownText.setVisible(true);
@@ -395,14 +377,12 @@ export default class MainScene extends Phaser.Scene {
                     this.startShockwaveCooldown(Config.SHOCKWAVE_INTERVAL_MS || 10000);
                 }
             } else {
-                // [하악질 스킬 미보유 시] -> 점프 발동
                 if (!this.data.get('isJumping')) {
                     this.triggerJump(player);
                 }
             }
         }
 
-        // --- 쿨타임 텍스트 업데이트 (스킬 보유 시에만) ---
         if (hasShockwave && shockwaveCooldownText) {
              shockwaveCooldownText.setPosition(player.x, player.y - (player.displayHeight / 2) * player.scaleY - 40);
              shockwaveCooldownText.setVisible(true);
@@ -422,7 +402,6 @@ export default class MainScene extends Phaser.Scene {
              shockwaveCooldownText.setVisible(false);
         }
 
-        // --- 플레이어 애니메이션 업데이트 ---
         const isInvincible = player.getData('isInvincible');
         const isHaak = this.data.get('isHaak');
         
@@ -434,14 +413,13 @@ export default class MainScene extends Phaser.Scene {
             if (isMoving && !isJumping) {
                 player.anims.play('cat_walk', true);
             } else {
-                // 점프 중에는 걷기 애니메이션 멈춤
                 player.anims.stop();
                 if (!isJumping) player.setTexture('player_sprite'); 
                 player.setFrame(0);
             }
         }
 
-        // --- 적 AI 로직 ---
+        // --- [쥐 AI 수정] 벽 타기(Sliding) 적용 ---
         const mice = this.data.get('mice');
         mice.getChildren().forEach(mouse => {
             if (mouse.active && mouse.body) {
@@ -450,6 +428,7 @@ export default class MainScene extends Phaser.Scene {
                 const speedFactor = mouse.getData('speedFactor') || 1; 
                 const finalSpeed = baseSpeed * speedFactor;
 
+                // 1. 기본 이동 로직 (도망/접근)
                 if (distSq < Config.FLEE_RADIUS_SQ) {
                     const fleeX = mouse.x - (player.x - mouse.x);
                     const fleeY = mouse.y - (player.y - mouse.y);
@@ -457,18 +436,127 @@ export default class MainScene extends Phaser.Scene {
                 } else if (distSq > Config.GATHERING_RADIUS_SQ) {
                     this.physics.moveToObject(mouse, player, finalSpeed);
                 }
+
+                // 2. [수정] 벽 슬라이딩: 막힌 쪽 속도를 0으로 만들지 않고(유지), 수직 방향 속도를 추가
+                if (mouse.body.blocked.left || mouse.body.blocked.right) {
+                    mouse.setVelocityY((player.y > mouse.y ? 1 : -1) * finalSpeed * 1.5);
+                } else if (mouse.body.blocked.up || mouse.body.blocked.down) {
+                    mouse.setVelocityX((player.x > mouse.x ? 1 : -1) * finalSpeed * 1.5);
+                }
+
                 mouse.setFlipX(mouse.body.velocity.x > 0);
             }
         });
 
+        // ============================================================
+        // [개 AI 업데이트] 벽 슬라이딩 추가
+        // ============================================================
         const dogs = this.data.get('dogs');
-        dogs.getChildren().forEach(dog => {
-            if (dog.active && dog.body && !dog.isKnockedBack && !dog.isStunned) {
-                const baseSpeed = Config.DOG_CHASE_SPEED;
-                const speedFactor = dog.getData('speedFactor') || 1;
-                const finalSpeed = baseSpeed * speedFactor;
+        const dogsArray = dogs.getChildren(); 
 
-                this.physics.moveToObject(dog, player, finalSpeed);
+        dogsArray.forEach(dog => {
+            if (dog.active && dog.body && !dog.isKnockedBack && !dog.isStunned) {
+                const isSpecial = dog.getData('isSpecial'); 
+                const isAmbush = dog.getData('isAmbush');
+                const speedFactor = dog.getData('speedFactor') || 1;
+                
+                let finalSpeed = Config.DOG_CHASE_SPEED * speedFactor; 
+                let targetVec = null;
+                let targetX = player.x; // 슬라이딩 방향 결정용
+                let targetY = player.y;
+
+                if (isSpecial) {
+                    finalSpeed = Config.BASE_PLAYER_SPEED * Config.SPECIAL_DOG_SPEED_RATIO * speedFactor;
+                    const predictTime = 0.5;
+                    const futureX = player.x + (player.body.velocity.x * predictTime);
+                    const futureY = player.y + (player.body.velocity.y * predictTime);
+                    targetX = futureX;
+                    targetY = futureY;
+                    targetVec = new Phaser.Math.Vector2(futureX - dog.x, futureY - dog.y).normalize().scale(finalSpeed);
+                }
+                else if (isAmbush) {
+                    const distToPlayer = Phaser.Math.Distance.Between(dog.x, dog.y, player.x, player.y);
+                    let ambushState = dog.getData('ambushState');
+
+                    if (ambushState === 'patrol') {
+                        if (distToPlayer < Config.AMBUSH_DETECT_RADIUS) {
+                            ambushState = 'chase';
+                            dog.setData('ambushState', 'chase');
+                        }
+                    } else if (ambushState === 'chase') {
+                        if (distToPlayer > Config.AMBUSH_RELEASE_RADIUS) {
+                            ambushState = 'patrol';
+                            dog.setData('ambushState', 'patrol');
+                            dog.setData('patrolTarget', null); 
+                        }
+                    }
+
+                    if (ambushState === 'chase') {
+                        finalSpeed = Config.DOG_CHASE_SPEED * speedFactor;
+                        targetVec = new Phaser.Math.Vector2(player.x - dog.x, player.y - dog.y).normalize().scale(finalSpeed);
+                    } else {
+                        let patrolTarget = dog.getData('patrolTarget');
+                        if (!patrolTarget || Phaser.Math.Distance.Between(dog.x, dog.y, patrolTarget.x, patrolTarget.y) < 50) {
+                            let tx, ty, attempts = 0;
+                            do {
+                                tx = Phaser.Math.Between(0, this.physics.world.bounds.width);
+                                ty = Phaser.Math.Between(0, this.physics.world.bounds.height);
+                                attempts++;
+                            } while (Phaser.Math.Distance.Between(tx, ty, player.x, player.y) < 800 && attempts < 10);
+                            
+                            patrolTarget = { x: tx, y: ty };
+                            dog.setData('patrolTarget', patrolTarget);
+                        }
+                        
+                        targetX = patrolTarget.x;
+                        targetY = patrolTarget.y;
+                        finalSpeed = Config.DOG_CHASE_SPEED * speedFactor * 0.8;
+                        targetVec = new Phaser.Math.Vector2(patrolTarget.x - dog.x, patrolTarget.y - dog.y).normalize().scale(finalSpeed);
+                    }
+                }
+                else {
+                    finalSpeed = Config.DOG_CHASE_SPEED * speedFactor;
+                    targetVec = new Phaser.Math.Vector2(player.x - dog.x, player.y - dog.y).normalize().scale(finalSpeed);
+                }
+
+                const separationVec = new Phaser.Math.Vector2(0, 0);
+                const separationRadius = 70; 
+                
+                dogsArray.forEach(otherDog => {
+                    if (dog === otherDog || !otherDog.active) return;
+                    
+                    const distSq = Phaser.Math.Distance.Squared(dog.x, dog.y, otherDog.x, otherDog.y);
+                    if (distSq < separationRadius * separationRadius) {
+                        const dist = Math.sqrt(distSq);
+                        const pushDir = new Phaser.Math.Vector2(dog.x - otherDog.x, dog.y - otherDog.y).normalize();
+                        
+                        const weight = (separationRadius - dist) / separationRadius;
+                        pushDir.scale(weight * finalSpeed * 1.5); 
+                        separationVec.add(pushDir);
+                    }
+                });
+
+                const finalVelocity = targetVec.add(separationVec);
+
+                // --- [수정] 개 벽 슬라이딩 로직 ---
+                // 막힌 쪽의 Velocity를 0으로 만들지 않고 유지시킴 (Stuttering 방지)
+                if (dog.body.blocked.left || dog.body.blocked.right) {
+                    dog.setVelocityY((targetY > dog.y ? 1 : -1) * finalSpeed * 1.5);
+                    // X축 속도는 targetVec 계산값 그대로 유지 (벽을 미는 힘)
+                    finalVelocity.y = (targetY > dog.y ? 1 : -1) * finalSpeed * 1.5;
+                } else if (dog.body.blocked.up || dog.body.blocked.down) {
+                    dog.setVelocityX((targetX > dog.x ? 1 : -1) * finalSpeed * 1.5);
+                    // Y축 속도는 그대로 유지
+                    finalVelocity.x = (targetX > dog.x ? 1 : -1) * finalSpeed * 1.5;
+                }
+
+                if (finalVelocity.length() > finalSpeed * 1.5) { // 슬라이딩 시 속도 상한 허용
+                    finalVelocity.normalize().scale(finalSpeed * 1.5);
+                } else if (!dog.body.blocked.none && finalVelocity.length() > finalSpeed) {
+                     finalVelocity.normalize().scale(finalSpeed);
+                }
+
+                dog.setVelocity(finalVelocity.x, finalVelocity.y);
                 dog.setFlipX(dog.body.velocity.x > 0);
             }
         });
@@ -497,7 +585,6 @@ export default class MainScene extends Phaser.Scene {
         });
     }
 
-    // [수정] 점프 기능 (displayOriginY를 사용하여 물리 좌표 고정 문제 해결)
     triggerJump(player) {
         if (this.data.get('isJumping')) return;
         
@@ -508,12 +595,10 @@ export default class MainScene extends Phaser.Scene {
         this.data.set('isJumping', true);
         this.data.set('lastJumpTime', now);
 
-        // 1. 벽 충돌 비활성화
         if (this.wallCollider) {
             this.wallCollider.active = false;
         }
 
-        // 2. 물리적 도약 (속도 부스트)
         const body = player.body;
         if (body.velocity.length() > 10) {
              const currentVel = body.velocity.clone();
@@ -521,19 +606,14 @@ export default class MainScene extends Phaser.Scene {
              player.setVelocity(currentVel.x * boost, currentVel.y * boost);
         }
         
-        // 공중에서는 마찰력 제거 (관성 유지)
         player.setDrag(0);
 
-        // 3. 점프 시각적 효과
-        // 중요: y좌표를 tween하면 물리 이동과 충돌하므로, displayOriginY(그림 중심점)를 변경하여 위로 띄웁니다.
         const originalScale = player.getData('baseScale');
         const jumpDuration = Config.JUMP_DURATION_MS;
-        const defaultOriginY = player.displayOriginY; // 보통 50 (height/2)
+        const defaultOriginY = player.displayOriginY; 
 
         this.tweens.add({
             targets: player,
-            // [핵심 수정] y 대신 displayOriginY를 변경. 
-            // displayOriginY가 커지면 텍스처가 기준점보다 위로 그려짐.
             displayOriginY: defaultOriginY + Config.JUMP_HEIGHT_PIXEL, 
             scaleX: originalScale * 1.2, 
             scaleY: originalScale * 1.2,
@@ -543,12 +623,9 @@ export default class MainScene extends Phaser.Scene {
             onComplete: () => {
                 this.data.set('isJumping', false);
                 player.setScale(originalScale);
-                player.setOrigin(0.5, 0.5); // origin 초기화 (혹시 모를 오차 방지)
-                
-                // 착지 후 마찰력 복구
+                player.setOrigin(0.5, 0.5); 
                 player.setDrag(500); 
 
-                // 벽 충돌 다시 활성화
                 if (this.wallCollider) {
                     this.wallCollider.active = true;
                 }
@@ -671,7 +748,6 @@ export default class MainScene extends Phaser.Scene {
 
     hitMouse(player, mouse) {
         if (this.data.get('gameOver')) return;
-        // [참고] 충돌 무시는 processCallback(canPlayerCollide)에서 처리됨
 
         const mice = this.data.get('mice');
         mice.killAndHide(mouse);
@@ -706,7 +782,6 @@ export default class MainScene extends Phaser.Scene {
 
     hitDog(player, dog) {
         if (this.data.get('gameOver')) return;
-        // [참고] 충돌 무시는 processCallback(canPlayerCollide)에서 처리됨
         if (player.getData('isInvincible')) return;
 
         const skills = this.data.get('skills') || [];
