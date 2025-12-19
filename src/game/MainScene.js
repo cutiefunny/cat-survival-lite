@@ -13,6 +13,7 @@ export default class MainScene extends Phaser.Scene {
     constructor() {
         super('MainScene');
         this.config = {}; // 동적 설정을 담을 객체
+        this.lastStaminaUseTime = 0; // 기력 사용 시점 기록용
     }
 
     preload() {
@@ -32,7 +33,6 @@ export default class MainScene extends Phaser.Scene {
     }
 
     async create() {
-        // [중요] DB에서 설정값 불러오기
         this.config = await fetchGameConfig();
         console.log("Loaded Game Config:", this.config);
 
@@ -92,9 +92,13 @@ export default class MainScene extends Phaser.Scene {
         
         player.setData('level', 1);
         player.setData('experience', 0);
-        // Config -> this.config 로 변경
         player.setData('energy', this.config.INITIAL_PLAYER_ENERGY);
         player.setData('maxEnergy', this.config.INITIAL_PLAYER_ENERGY);
+        
+        // [신규] 기력 초기화
+        player.setData('stamina', this.config.PLAYER_MAX_STAMINA);
+        player.setData('maxStamina', this.config.PLAYER_MAX_STAMINA);
+        
         player.setData('isInvincible', false); 
         
         const isMobile = this.sys.game.device.os.android || this.sys.game.device.os.iOS;
@@ -119,43 +123,31 @@ export default class MainScene extends Phaser.Scene {
                 fixed: true
             });
 
-            // [신규] 화면 아무 곳이나 터치하면 점프 (조이스틱 영역 제외)
             this.input.on('pointerdown', (pointer) => {
-                // 1. 현재 조이스틱을 조작 중인 손가락(Pointer)이면 점프하지 않음
-                if (this.joyStick.pointer && this.joyStick.pointer.id === pointer.id) {
-                    return;
-                }
-
-                // 2. 조이스틱 영역을 터치하려고 한 경우에도 점프하지 않음 (오조작 방지)
-                // pointer.x/y는 월드 좌표이므로 카메라 스크롤을 빼서 스크린 좌표로 변환
+                if (this.joyStick.pointer && this.joyStick.pointer.id === pointer.id) return;
+                
                 const screenX = pointer.x - this.cameras.main.scrollX;
                 const screenY = pointer.y - this.cameras.main.scrollY;
-                
-                // 조이스틱 중심과의 거리 계산 (여유 반경 1.5배)
                 const dist = Phaser.Math.Distance.Between(screenX, screenY, joyX, joyY);
-                if (dist <= joyRadius * 1.5) {
-                    return; 
-                }
+                if (dist <= joyRadius * 1.5) return; 
 
-                // 위 조건들을 통과했다면 "점프 의도" 플래그 설정
                 this.data.set('wantToJump', true);
             });
         }
 
         const energyBarBg = this.add.graphics();
+        const staminaBarBg = this.add.graphics(); // [신규] 기력바 배경
         const expBarBg = this.add.graphics();
+        
         const energyBarFill = this.add.graphics();
+        const staminaBarFill = this.add.graphics(); // [신규] 기력바 채움
         const expBarFill = this.add.graphics();
         
-        energyBarBg.setScrollFactor(0);
-        expBarBg.setScrollFactor(0);
-        energyBarFill.setScrollFactor(0);
-        expBarFill.setScrollFactor(0);
-        
-        energyBarBg.setDepth(10);
-        energyBarFill.setDepth(10);
-        expBarBg.setDepth(10);
-        expBarFill.setDepth(10);
+        // UI 그래픽스 설정
+        [energyBarBg, staminaBarBg, expBarBg, energyBarFill, staminaBarFill, expBarFill].forEach(g => {
+            g.setScrollFactor(0);
+            g.setDepth(10);
+        });
 
         const shockwaveCooldownText = this.add.text(player.x, player.y, '', {
             fontSize: '18px', color: '#FFFF00', stroke: '#000000', strokeThickness: 4, align: 'center', fontStyle: 'bold'
@@ -168,10 +160,16 @@ export default class MainScene extends Phaser.Scene {
         const drawUI = () => {
             if (!player.active) return;
             const screenWidth = this.cameras.main.width;
-            const barX = screenWidth / 2 - (this.config.ENERGY_BAR_WIDTH / 2);
-            const energyY = 20; 
-            const expY = energyY + this.config.ENERGY_BAR_HEIGHT + 5;
+            
+            // [UI 배치] 체력 -> 기력 -> 경험치 순서
+            const barWidth = this.config.ENERGY_BAR_WIDTH;
+            const barX = screenWidth / 2 - (barWidth / 2);
+            
+            const energyY = 20;
+            const staminaY = energyY + this.config.ENERGY_BAR_HEIGHT + 4; // 체력바 바로 아래
+            const expY = staminaY + this.config.STAMINA_BAR_HEIGHT + 4;   // 기력바 바로 아래
 
+            // 1. Energy (Health)
             const currentEnergy = player.getData('energy');
             const maxEnergy = player.getData('maxEnergy');
             const energyPercent = Phaser.Math.Clamp(currentEnergy / maxEnergy, 0, 1);
@@ -184,6 +182,20 @@ export default class MainScene extends Phaser.Scene {
             energyBarFill.fillStyle(0x00ff00, 1);
             energyBarFill.fillRect(barX, energyY, this.config.ENERGY_BAR_WIDTH * energyPercent, this.config.ENERGY_BAR_HEIGHT);
 
+            // 2. [신규] Stamina
+            const currentStamina = player.getData('stamina');
+            const maxStamina = player.getData('maxStamina');
+            const staminaPercent = Phaser.Math.Clamp(currentStamina / maxStamina, 0, 1);
+
+            staminaBarBg.clear();
+            staminaBarBg.fillStyle(0x000000, 0.5);
+            staminaBarBg.fillRect(barX, staminaY, this.config.STAMINA_BAR_WIDTH, this.config.STAMINA_BAR_HEIGHT);
+
+            staminaBarFill.clear();
+            staminaBarFill.fillStyle(this.config.STAMINA_BAR_COLOR, 1);
+            staminaBarFill.fillRect(barX, staminaY, this.config.STAMINA_BAR_WIDTH * staminaPercent, this.config.STAMINA_BAR_HEIGHT);
+
+            // 3. EXP
             const totalMice = this.stageMiceTotal || 1; 
             const killedMice = this.stageMiceKilled || 0;
             const progressPercent = Phaser.Math.Clamp(killedMice / totalMice, 0, 1);
@@ -201,6 +213,8 @@ export default class MainScene extends Phaser.Scene {
         drawUI(); 
         
         player.on('changedata-energy', drawUI);
+        // [신규] 기력 변경 시에도 UI 다시 그리기
+        player.on('changedata-stamina', drawUI);
 
         this.data.set('player', player);
         const mice = this.physics.add.group();
@@ -216,7 +230,7 @@ export default class MainScene extends Phaser.Scene {
              this.data.set('skills', []);
         }
 
-        this.input.addPointer(2); // 멀티 터치 활성화 (중요!)
+        this.input.addPointer(2); 
         this.cameras.main.startFollow(player, true, 0.05, 0.05);
 
         const fishItems = this.data.get('fishItems');
@@ -285,7 +299,6 @@ export default class MainScene extends Phaser.Scene {
             this.spawnEntity(mice, 'mouse_enemy_sprite', 'mouse_walk', 0.32);
         }
 
-        // Config에서 확률 가져오기
         const specialCount = Math.floor(stageDogsTotal * this.config.SPECIAL_DOG_RATIO);
         const ambushCount = Math.floor(stageDogsTotal * this.config.AMBUSH_DOG_RATIO);
 
@@ -326,13 +339,25 @@ export default class MainScene extends Phaser.Scene {
 
     update(time, delta) {
         if (this.data.get('gameOver')) return;
-        
         if (!this.config || Object.keys(this.config).length === 0) return;
 
         const player = this.data.get('player');
         const cursors = this.data.get('cursors');
 
         if (!player || !cursors) return;
+
+        // [신규] 기력 회복 로직 (delta 이용)
+        const now = this.time.now;
+        if (now - this.lastStaminaUseTime > this.config.STAMINA_REGEN_DELAY_MS) {
+            const currentStamina = player.getData('stamina');
+            const maxStamina = this.config.PLAYER_MAX_STAMINA;
+            if (currentStamina < maxStamina) {
+                // 초당 회복량 * 경과 시간(초)
+                const regenAmount = this.config.STAMINA_REGEN_RATE * (delta / 1000);
+                const nextStamina = Math.min(maxStamina, currentStamina + regenAmount);
+                player.setData('stamina', nextStamina);
+            }
+        }
 
         const skills = this.data.get('skills') || [];
         const hasShockwave = skills.includes(this.config.SHOCKWAVE_SKILL_ID);
@@ -392,10 +417,9 @@ export default class MainScene extends Phaser.Scene {
         const spaceKey = this.data.get('spaceKey');
         if (Phaser.Input.Keyboard.JustDown(spaceKey)) triggerAction = true;
         
-        // [신규] 멀티 터치 점프 플래그 체크
         if (this.data.get('wantToJump')) {
             triggerAction = true;
-            this.data.set('wantToJump', false); // 플래그 소모
+            this.data.set('wantToJump', false); 
         }
         
         const isActionBtnPressed = this.data.get('isActionBtnPressed');
@@ -486,9 +510,6 @@ export default class MainScene extends Phaser.Scene {
             }
         });
 
-        // ============================================================
-        // [개 AI 업데이트]
-        // ============================================================
         const dogs = this.data.get('dogs');
         const dogsArray = dogs.getChildren(); 
 
@@ -627,6 +648,14 @@ export default class MainScene extends Phaser.Scene {
         const now = this.time.now;
         if (now - lastJumpTime < this.config.JUMP_COOLDOWN_MS) return;
 
+        // [신규] 기력 체크 및 소모
+        const stamina = player.getData('stamina');
+        if (stamina < this.config.STAMINA_JUMP_COST) {
+            return; // 기력 부족 시 점프 불가
+        }
+        player.setData('stamina', stamina - this.config.STAMINA_JUMP_COST);
+        this.lastStaminaUseTime = now; // 사용 시점 기록 -> 회복 대기시간 리셋
+
         this.data.set('isJumping', true);
         this.data.set('lastJumpTime', now);
 
@@ -665,7 +694,6 @@ export default class MainScene extends Phaser.Scene {
                     this.wallCollider.active = true;
                 }
                 
-                // 착지 순간 강제 충돌 체크 (점프 버그 수정용)
                 this.physics.overlap(player, this.data.get('mice'), this.hitMouse, null, this);
                 this.physics.overlap(player, this.data.get('dogs'), this.hitDog, null, this);
             }

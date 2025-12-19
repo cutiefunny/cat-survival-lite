@@ -14,6 +14,12 @@ export const PLAYER_PUSH_BACK_FORCE = 300;
 export const KNOCKBACK_DURATION_MS = 250;
 export const PLAYER_INVINCIBILITY_DURATION_MS = 500;
 
+// [신규] 기력(Stamina) 설정
+export const PLAYER_MAX_STAMINA = 100;       // 최대 기력
+export const STAMINA_JUMP_COST = 60;         // 점프 시 소모량
+export const STAMINA_REGEN_DELAY_MS = 1000;  // 회복 시작 대기 시간 (1초)
+export const STAMINA_REGEN_RATE = 20;        // 초당 회복량
+
 // --- 점프 설정 ---
 export const JUMP_DURATION_MS = 600;
 export const JUMP_HEIGHT_PIXEL = 50;
@@ -31,27 +37,24 @@ export const FLEE_RADIUS_SQ = FLEE_RADIUS * FLEE_RADIUS;
 export const GATHERING_RADIUS = 700;
 export const GATHERING_RADIUS_SQ = GATHERING_RADIUS * GATHERING_RADIUS;
 
-export const DOG_CHASE_SPEED = BASE_PLAYER_SPEED * 0.3; // 일반 개 속도
+export const DOG_CHASE_SPEED = BASE_PLAYER_SPEED * 0.3;
 
 // --- [적 AI 심화 설정] ---
-// [Type 1] 특수 추적 개체 (Smart/Fast)
-export const SPECIAL_DOG_RATIO = 0.2;        // 등장 확률 (0.2 = 20%)
-export const SPECIAL_DOG_SPEED_RATIO = 0.8;  // 플레이어 속도 대비 비율
-export const SPECIAL_DOG_PREDICT_TIME = 0.5; // 미래 위치 예측 시간 (초) - 높을수록 더 앞서서 움직임
-export const SPECIAL_DOG_TINT = 0xffaaaa;    // 색상 (Admin에서는 숫자로 표시됨)
+export const SPECIAL_DOG_RATIO = 0.2;
+export const SPECIAL_DOG_SPEED_RATIO = 0.8;
+export const SPECIAL_DOG_PREDICT_TIME = 0.5;
+export const SPECIAL_DOG_TINT = 0xffaaaa;
 
-// [Type 2] 매복형 개체 (Ambush/Patrol)
-export const AMBUSH_DOG_RATIO = 0.2;         // 등장 확률
-export const AMBUSH_DETECT_RADIUS = 350;     // 플레이어 감지 거리
-export const AMBUSH_RELEASE_RADIUS = 600;    // 추격 포기 거리
-export const AMBUSH_PATROL_RADIUS = 500;     // 배회 시 랜덤 목표 반경 (사용 안 함, 아래 로직 대체)
-export const AMBUSH_PATROL_SPEED_RATIO = 0.8; // 배회 중일 때 속도 비율 (추격 속도 대비)
-export const AMBUSH_PATROL_MIN_DIST = 800;   // 배회 목표지점 선정 시 플레이어와의 최소 거리
-export const AMBUSH_DOG_TINT = 0xaaaaff;     // 색상
+export const AMBUSH_DOG_RATIO = 0.2;
+export const AMBUSH_DETECT_RADIUS = 350;
+export const AMBUSH_RELEASE_RADIUS = 600;
+export const AMBUSH_PATROL_RADIUS = 500;
+export const AMBUSH_PATROL_SPEED_RATIO = 0.8;
+export const AMBUSH_PATROL_MIN_DIST = 800;
+export const AMBUSH_DOG_TINT = 0xaaaaff;
 
-// [물리] 적끼리 겹침 방지 (Separation)
-export const DOG_SEPARATION_RADIUS = 70;     // 서로 밀어내는 거리
-export const DOG_SEPARATION_FORCE = 1.5;     // 밀어내는 힘의 배수
+export const DOG_SEPARATION_RADIUS = 70;
+export const DOG_SEPARATION_FORCE = 1.5;
 
 // --- 아이템 및 기타 설정 ---
 export const FISH_SPAWN_INTERVAL_MS = 5000;
@@ -64,6 +67,11 @@ export const ENERGY_BAR_WIDTH = 60;
 export const ENERGY_BAR_HEIGHT = 8;
 export const EXP_BAR_WIDTH = 60;
 export const EXP_BAR_HEIGHT = 6;
+
+// [신규] 기력 바 치수 및 색상
+export const STAMINA_BAR_WIDTH = 60;
+export const STAMINA_BAR_HEIGHT = 6;
+export const STAMINA_BAR_COLOR = 0x00BFFF; // 하늘색
 
 // --- 스킬 설정 ---
 export const SHOCKWAVE_SKILL_ID = 51;
