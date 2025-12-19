@@ -179,12 +179,15 @@ export default function GameCanvas(props) {
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div ref={gameContainer} style={{ width: '100%', height: '100%' }}></div>
 
-      {/* [수정] 액션 버튼 (점프/하악질) 표시 로직 
-          - 스킬이 없으면 항상 표시 (점프)
-          - 스킬이 있으면 준비되었을 때만 표시 (하악질)하거나 항상 표시 후 시각적 차이 등
-            (요청사항: 하악질 획득 시 대체됨)
+      {/* [변경 사항]
+          기존: !hasShockwaveSkill() || isShockwaveReady()
+          -> 스킬이 없을 때(기본 점프) 버튼이 항상 보였음.
+          
+          변경: hasShockwaveSkill() && isShockwaveReady()
+          -> 스킬을 보유하고 + 쿨타임이 찼을 때(준비됨)만 버튼 표시 (⚡).
+          -> 즉, 기본 점프 버튼(⬆️)은 더 이상 보이지 않음.
       */}
-      <Show when={!hasShockwaveSkill() || isShockwaveReady()}>
+      <Show when={hasShockwaveSkill() && isShockwaveReady()}>
         <div 
             className="action-btn-container"
             onTouchStart={handleActionStart}
@@ -195,8 +198,7 @@ export default function GameCanvas(props) {
             onMouseLeave={handleActionEnd}
         >
             <div className={`action-btn ${isActionBtnPressed ? 'active' : ''}`}>
-                {/* 하악질 스킬이 있으면 번개, 없으면 점프(화살표) */}
-                {hasShockwaveSkill() ? '⚡' : '⬆️'}
+                ⚡
             </div>
         </div>
       </Show>
@@ -217,12 +219,10 @@ export default function GameCanvas(props) {
 
       <style>{`
         .action-btn-container {
-            /* [기본] 항상 표시 (모바일이 아닌 경우에도 테스트를 위해 보이게 할 수 있음) */
-            /* 현재 로직은 hover: none (모바일) 일때만 보이게 설정되어 있음 */
             display: none; 
             position: absolute;
             bottom: 40px;
-            left: 40px; /* 왼쪽에 배치 */
+            left: 40px; 
             z-index: 50;
             opacity: 0.8;
             touch-action: none;
@@ -241,9 +241,6 @@ export default function GameCanvas(props) {
             background-color: rgba(255, 100, 100, 0.8);
             transform: scale(0.95);
         }
-        /* [수정] 점프 버튼은 기본적으로 필요하므로 데스크탑에서도 보일 수 있게 할지, 
-           아니면 모바일 환경 에뮬레이션에서만 보일지 결정. 
-           일단 기존 로직(모바일 감지) 유지하되, 필요시 display: block으로 변경 가능 */
         @media (hover: none) and (pointer: coarse) {
             .action-btn-container { display: block; }
         }
