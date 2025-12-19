@@ -12,6 +12,9 @@ export default class UIManager {
         this.staminaBarFill = null;
         this.expBarFill = null;
         this.shockwaveCooldownText = null;
+
+        this.isStaminaWarning = false; // 현재 그리기 색상 결정용 플래그
+        this.isStaminaWarningProcessing = false; // [신규] 깜빡임 애니메이션 중복 실행 방지 플래그
     }
 
     createUI(player) {
@@ -42,15 +45,52 @@ export default class UIManager {
         // 초기 그리기
         drawUI(); 
         
-        // 데이터 변경 감지 이벤트 연결
         player.on('changedata-energy', drawUI);
         player.on('changedata-stamina', drawUI);
         
-        // 쇼크웨이브 UI 헬퍼
-        const setShockwaveReady = (isReady) => {
-            // 필요 시 UI 효과 추가
-        };
+        // 기력 부족 경고 이벤트 리스너 등록
+        this.scene.events.on('stamina-warning', this._triggerStaminaWarning, this);
+
+        const setShockwaveReady = (isReady) => {};
         this.scene.data.set('setShockwaveReady', setShockwaveReady);
+    }
+
+    // [수정] 기력 부족 시 깜빡임(Blink) 효과 실행
+    _triggerStaminaWarning() {
+        if (this.isStaminaWarningProcessing) return; // 이미 깜빡이는 중이면 중복 실행 방지
+        
+        this.isStaminaWarningProcessing = true;
+        let blinkCount = 0;
+        const maxBlinks = 4; // ON -> OFF -> ON -> OFF (총 2회 깜빡임)
+
+        // 1. 즉시 빨간색(ON)
+        this.isStaminaWarning = true;
+        this._forceUpdateUI();
+        blinkCount++;
+
+        // 2. 100ms 간격으로 토글
+        const timer = this.scene.time.addEvent({
+            delay: 100,
+            loop: true,
+            callback: () => {
+                this.isStaminaWarning = !this.isStaminaWarning; // 색상 반전
+                this._forceUpdateUI();
+                blinkCount++;
+
+                // 지정된 횟수만큼 깜빡였으면 종료
+                if (blinkCount >= maxBlinks) {
+                    this.isStaminaWarning = false; // 원래 색으로 복구
+                    this._forceUpdateUI();
+                    this.isStaminaWarningProcessing = false; // 락 해제
+                    timer.remove();
+                }
+            }
+        });
+    }
+
+    _forceUpdateUI() {
+        const player = this.scene.data.get('player');
+        if (player) this._drawUI(player);
     }
 
     _drawUI(player) {
@@ -72,13 +112,15 @@ export default class UIManager {
         this.energyBarBg.clear().fillStyle(0x000000, 0.5).fillRect(barX, energyY, this.config.ENERGY_BAR_WIDTH, this.config.ENERGY_BAR_HEIGHT);
         this.energyBarFill.clear().fillStyle(0x00ff00, 1).fillRect(barX, energyY, this.config.ENERGY_BAR_WIDTH * energyPercent, this.config.ENERGY_BAR_HEIGHT);
 
-        // 2. Stamina
+        // 2. Stamina (경고 플래그에 따라 빨간색 or 기본색)
         const currentStamina = player.getData('stamina');
         const maxStamina = player.getData('maxStamina');
         const staminaPercent = Phaser.Math.Clamp(currentStamina / maxStamina, 0, 1);
         
+        const staminaColor = this.isStaminaWarning ? 0xFF0000 : this.config.STAMINA_BAR_COLOR;
+
         this.staminaBarBg.clear().fillStyle(0x000000, 0.5).fillRect(barX, staminaY, this.config.STAMINA_BAR_WIDTH, this.config.STAMINA_BAR_HEIGHT);
-        this.staminaBarFill.clear().fillStyle(this.config.STAMINA_BAR_COLOR, 1).fillRect(barX, staminaY, this.config.STAMINA_BAR_WIDTH * staminaPercent, this.config.STAMINA_BAR_HEIGHT);
+        this.staminaBarFill.clear().fillStyle(staminaColor, 1).fillRect(barX, staminaY, this.config.STAMINA_BAR_WIDTH * staminaPercent, this.config.STAMINA_BAR_HEIGHT);
 
         // 3. EXP
         const totalMice = this.scene.enemyManager ? this.scene.enemyManager.stageMiceTotal : 1;
@@ -94,11 +136,8 @@ export default class UIManager {
         const hasShockwave = skills.includes(this.config.SHOCKWAVE_SKILL_ID);
         const player = this.scene.data.get('player');
 
-        // 스킬 초기화 체크 (MainScene 로직에서 옮겨옴)
         if (hasShockwave && this.scene.data.get('shockwaveReady') === undefined) {
              this.scene.data.set('shockwaveReady', false);
-             // 초기 쿨타임 시작 로직이 필요하다면 여기에 추가 (지금은 PlayerManager에서 트리거될 때 시작됨)
-             // 첫 시작은 쿨타임 없이 사용 가능하게 하려면 true로 설정
              this.scene.data.set('shockwaveReady', true); 
         }
 

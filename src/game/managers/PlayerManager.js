@@ -31,13 +31,11 @@ export default class PlayerManager {
         this.player.setData('maxStamina', this.config.PLAYER_MAX_STAMINA);
         this.player.setData('isInvincible', false); 
         
-        // 크기 설정
         const isMobile = this.scene.data.get('isMobile');
         const finalPlayerScale = 0.5 * (isMobile ? 0.7 : 1.0);
         this.player.setScale(finalPlayerScale);
         this.player.setData('baseScale', finalPlayerScale); 
 
-        // 카메라 추적
         this.scene.cameras.main.startFollow(this.player, true, 0.05, 0.05);
         this.scene.data.set('player', this.player);
 
@@ -197,7 +195,11 @@ export default class PlayerManager {
         if (now - lastJumpTime < this.config.JUMP_COOLDOWN_MS) return;
 
         const stamina = this.player.getData('stamina');
-        if (stamina < this.config.STAMINA_JUMP_COST) return;
+        if (stamina < this.config.STAMINA_JUMP_COST) {
+            // [신규] 기력 부족 이벤트 발생 -> UIManager가 처리
+            this.scene.events.emit('stamina-warning');
+            return; 
+        }
 
         this.player.setData('stamina', stamina - this.config.STAMINA_JUMP_COST);
         this.lastStaminaUseTime = now;
@@ -232,9 +234,6 @@ export default class PlayerManager {
                 this.player.setDrag(500); 
 
                 if (this.wallCollider) this.wallCollider.active = true;
-                
-                // 점프 끝난 후 충돌 체크 재활성화는 Physics에서 자동 처리되지만,
-                // 필요 시 여기서 overlap 다시 체크 가능 (현재 구조상 불필요)
             }
         });
     }
@@ -247,12 +246,7 @@ export default class PlayerManager {
             this.scene.data.set('isHaak', false); 
         });
 
-        // 쿨타임 시작 (UI 업데이트는 UIManager가 데이터 변경 감지하거나 여기서 호출)
         this.scene.data.set('shockwaveReady', false);
-        // MainScene의 EnemyManager를 통해 적들을 밀쳐내는 로직 호출 필요
-        // 하지만 여기서는 데이터(isReady)만 변경하고, 실제 효과는 EnemyManager가 처리하거나
-        // 여기서 직접 원을 그리고 Physics Overlap을 할 수도 있음.
-        // **구조상 PlayerManager가 이펙트를 그리고 충격파 로직을 수행하는 것이 맞음**
         
         const shockwaveCircle = this.scene.add.circle(this.player.x, this.player.y, this.config.SHOCKWAVE_RADIUS_START, this.config.SHOCKWAVE_COLOR, 0.7);
         shockwaveCircle.setStrokeStyle(this.config.SHOCKWAVE_LINE_WIDTH, this.config.SHOCKWAVE_COLOR, 0.9);
@@ -268,7 +262,6 @@ export default class PlayerManager {
             onComplete: () => { shockwaveCircle.destroy(); }
         });
 
-        // 적들에게 물리력 행사
         const mice = this.scene.data.get('mice');
         const dogs = this.scene.data.get('dogs');
         const targets = [...mice.getChildren(), ...dogs.getChildren()];
@@ -289,7 +282,6 @@ export default class PlayerManager {
             }
         });
 
-        // 타이머 이벤트 설정 (쿨타임)
         if (this.scene.shockwaveTimer) this.scene.shockwaveTimer.remove();
         this.scene.shockwaveTimer = this.scene.time.addEvent({
             delay: this.config.SHOCKWAVE_INTERVAL_MS || 10000,

@@ -102,6 +102,9 @@ export default class MainScene extends Phaser.Scene {
         const runAiLogic = (this.frameCounter % 3 === 0);
         const runSeparationLogic = (this.frameCounter % 5 === 0);
 
+        // [신규] MapManager 업데이트 호출 (벽 파괴 로직 처리)
+        if (this.mapManager) this.mapManager.update(time, delta);
+
         // 각 매니저 Update 호출
         if (this.playerManager) this.playerManager.update(time, delta);
         if (this.uiManager) this.uiManager.update();

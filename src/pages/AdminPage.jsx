@@ -12,14 +12,12 @@ const AdminPage = () => {
         setLoading(false);
     });
 
-    // 값 변경 핸들러
     const handleChange = (key, value, type) => {
         let finalValue = value;
 
         if (type === 'number') {
-            // 소수점 입력 중(. 만 입력된 상태)이거나 마이너스 부호 등은 그대로 둠
             if (value === '' || value === '-' || value === '.') {
-                // do nothing (allow typing)
+                // 입력 중인 상태 허용
             } else {
                 finalValue = Number(value);
             }
@@ -53,29 +51,23 @@ const AdminPage = () => {
         return value;
     };
 
-    // [신규 기능] 키워드에 따라 input의 step(증감 단위)을 자동 설정
     const getStep = (key) => {
-        // 소수점이 필요한 키워드들 (0.1 단위)
-        // RATIO (비율), PROBABILITY (확률), MULTIPLIER (배수), PREDICT_TIME (예측 시간), SEPARATION_FORCE (밀어내는 힘 1.5 등)
         const floatKeywords = ['RATIO', 'PROBABILITY', 'MULTIPLIER', 'PREDICT_TIME', 'SEPARATION_FORCE'];
-        
         if (floatKeywords.some(term => key.includes(term))) {
             return "0.1";
         }
-        
-        // 그 외(픽셀, 밀리초 등)는 정수 단위 (1)
         return "1";
     };
 
-    // 카테고리 분류 로직
+    // [수정] 카테고리 분류 로직 강화
     const getCategories = () => {
         const currentConfig = config();
         if (!currentConfig) return {};
 
         const categories = {
             "Special Enemies (Elite & AI)": ['SPECIAL', 'AMBUSH'], 
-            "Player Stats": ['PLAYER', 'ENERGY'], 
-            "Player Jump": ['JUMP'],
+            "Player Stats (HP & Stamina)": ['PLAYER', 'ENERGY', 'STAMINA'], // [추가] STAMINA 키워드 추가
+            "Player Jump & Action": ['JUMP'],
             "Common Enemies": ['MOUSE', 'DOG', 'FLEE', 'GATHERING', 'VILLAIN', 'SEPARATION'],
             "Items": ['FISH', 'BUTTERFLY'],
             "Skills & UI": ['SHOCKWAVE', 'BAR', 'EXP'],
@@ -189,7 +181,7 @@ const AdminPage = () => {
                                                     ) : (
                                                         <input
                                                             type={typeof config()[key] === 'number' ? 'number' : 'text'}
-                                                            step={getStep(key)} /* [핵심] 키워드에 따라 0.1 또는 1 단위 적용 */
+                                                            step={getStep(key)} 
                                                             value={config()[key]}
                                                             onInput={(e) => handleChange(key, e.target.value, e.target.type)}
                                                             style={inputStyle}

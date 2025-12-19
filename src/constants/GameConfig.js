@@ -14,11 +14,11 @@ export const PLAYER_PUSH_BACK_FORCE = 300;
 export const KNOCKBACK_DURATION_MS = 250;
 export const PLAYER_INVINCIBILITY_DURATION_MS = 500;
 
-// [신규] 기력(Stamina) 설정
+// [신규] 기력(Stamina) 시스템 설정
 export const PLAYER_MAX_STAMINA = 100;       // 최대 기력
-export const STAMINA_JUMP_COST = 60;         // 점프 시 소모량
-export const STAMINA_REGEN_DELAY_MS = 1000;  // 회복 시작 대기 시간 (1초)
 export const STAMINA_REGEN_RATE = 20;        // 초당 회복량
+export const STAMINA_REGEN_DELAY_MS = 1000;  // 회복 시작 대기 시간 (ms)
+export const STAMINA_JUMP_COST = 60;         // 점프 시 소모량
 
 // --- 점프 설정 ---
 export const JUMP_DURATION_MS = 600;
@@ -68,7 +68,7 @@ export const ENERGY_BAR_HEIGHT = 8;
 export const EXP_BAR_WIDTH = 60;
 export const EXP_BAR_HEIGHT = 6;
 
-// [신규] 기력 바 치수 및 색상
+// 기력 바 설정
 export const STAMINA_BAR_WIDTH = 60;
 export const STAMINA_BAR_HEIGHT = 6;
 export const STAMINA_BAR_COLOR = 0x00BFFF; // 하늘색
@@ -82,3 +82,8 @@ export const SHOCKWAVE_DURATION_MS = 500;
 export const SHOCKWAVE_PUSH_FORCE = 500;
 export const SHOCKWAVE_COLOR = 0xADD8E6;
 export const SHOCKWAVE_LINE_WIDTH = 10;
+
+// --- 벽 파괴 시스템 설정 ---
+export const WALL_BREAK_REQUIRED_ENEMIES = 2;
+export const WALL_BREAK_DURATION_MS = 3000;
+export const WALL_BREAK_SUSTAIN_MS = 1000;

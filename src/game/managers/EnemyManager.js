@@ -25,7 +25,9 @@ export default class EnemyManager {
 
         if (wallLayer) {
             this.scene.physics.add.collider(mice, wallLayer);
-            this.scene.physics.add.collider(dogs, wallLayer);
+            this.scene.physics.add.collider(dogs, wallLayer, (enemy, tile) => {
+                this.scene.mapManager.handleWallCollision(enemy, tile);
+            });
         }
 
         // 충돌 핸들러 바인딩
@@ -419,15 +421,22 @@ export default class EnemyManager {
 
     collectFish(player, fish) {
         if (this.scene.data.get('gameOver')) return;
+        
+        // 아이템 제거 처리
         const items = this.scene.data.get('fishItems');
         items.killAndHide(fish);
         fish.disableBody(true, true);
 
+        // 1. 에너지(체력) 1칸 회복
         let energy = player.getData('energy');
         const maxEnergy = player.getData('maxEnergy');
         if (energy < maxEnergy) {
             player.setData('energy', energy + 1);
         }
+
+        // 2. [신규] 기력(Stamina) 완전 회복
+        const maxStamina = player.getData('maxStamina');
+        player.setData('stamina', maxStamina);
     }
 
     collectButterfly(player, butterfly) {
