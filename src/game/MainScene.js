@@ -60,20 +60,20 @@ export default class MainScene extends Phaser.Scene {
 
         // 3. 게임 월드 구성 순서
         // (1) 맵 생성
-        const { map, wallLayer } = this.mapManager.createMap();
+        const { map, wallLayer, blockLayer } = this.mapManager.createMap();
         
         // (2) 애니메이션 생성 (플레이어, 적 공통)
         this.createAnimations();
 
         // (3) 플레이어 생성
-        const player = this.playerManager.createPlayer(map, wallLayer);
+        const player = this.playerManager.createPlayer(map, wallLayer, blockLayer);
 
         // (4) UI 생성
         this.uiManager.createUI(player);
 
         // (5) 적/아이템 그룹 및 충돌 설정
         // EnemyManager가 플레이어와 벽 정보를 알아야 충돌 설정을 할 수 있음
-        this.enemyManager.setupGroupsAndColliders(player, wallLayer);
+        this.enemyManager.setupGroupsAndColliders(player, wallLayer, blockLayer);
 
         // (6) 게임 시작 (스테이지 1)
         this.enemyManager.startStage(1);

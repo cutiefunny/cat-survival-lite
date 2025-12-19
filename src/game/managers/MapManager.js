@@ -29,22 +29,26 @@ export default class MapManager {
         const grassTileset = this.map.addTilesetImage(grassTilesetName, 'grass_img');
         const plantTileset = this.map.addTilesetImage(plantTilesetName, 'tree_img');
 
+        // 1. Ground Layer
         this.map.createLayer('grass', grassTileset, 0, 0) || this.map.createLayer('Ground', grassTileset, 0, 0);
+        
+        // 2. Wall Layer (점프 가능, 파괴 가능)
         this.wallLayer = this.map.createLayer('Walls', plantTileset, 0, 0);
-
         if (this.wallLayer) {
             this.wallLayer.setCollisionByExclusion([-1]);
+        }
+
+        // 3. [신규] Block Layer (점프 불가, 완전 막힘)
+        // Tiled 에디터에서 'Blocks'라는 이름의 레이어를 만들어야 합니다.
+        this.blockLayer = this.map.createLayer('Blocks', plantTileset, 0, 0); 
+        if (this.blockLayer) {
+            this.blockLayer.setCollisionByExclusion([-1]);
         }
 
         this.scene.physics.world.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
         this.scene.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
 
-        // [디버깅용 텍스트]
-        this.debugText = this.scene.add.text(10, 150, 'Wall Debug', {
-            fontSize: '14px', fontFamily: 'monospace', fill: '#00ff00', backgroundColor: '#000000aa'
-        }).setScrollFactor(0).setDepth(100).setVisible(false);
-
-        return { map: this.map, wallLayer: this.wallLayer };
+        return { map: this.map, wallLayer: this.wallLayer, blockLayer: this.blockLayer };
     }
 
     spawnInitialItems(map, enemyManager) {

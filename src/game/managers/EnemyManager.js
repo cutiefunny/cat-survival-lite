@@ -12,7 +12,7 @@ export default class EnemyManager {
         this.stageButterflySpawned = false;
     }
 
-    setupGroupsAndColliders(player, wallLayer) {
+    setupGroupsAndColliders(player, wallLayer, blockLayer) {
         const mice = this.scene.physics.add.group();
         const dogs = this.scene.physics.add.group();
         const fishItems = this.scene.physics.add.group();
@@ -28,6 +28,11 @@ export default class EnemyManager {
             this.scene.physics.add.collider(dogs, wallLayer, (enemy, tile) => {
                 this.scene.mapManager.handleWallCollision(enemy, tile);
             });
+        }
+
+        if (blockLayer) {
+            this.scene.physics.add.collider(mice, blockLayer);
+            this.scene.physics.add.collider(dogs, blockLayer);
         }
 
         // 충돌 핸들러 바인딩

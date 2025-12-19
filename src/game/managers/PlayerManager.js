@@ -9,11 +9,27 @@ export default class PlayerManager {
         this.wallCollider = null;
     }
 
-    createPlayer(map, wallLayer) {
+    createPlayer(map, wallLayer, blockLayer) {
         this.player = this.scene.physics.add.sprite(map.widthInPixels / 2, map.heightInPixels / 2, 'player_sprite');
         
+        // 1. Wall 충돌 (점프 시 통과)
         if (wallLayer) {
-            this.wallCollider = this.scene.physics.add.collider(this.player, wallLayer);
+            this.wallCollider = this.scene.physics.add.collider(
+                this.player, 
+                wallLayer, 
+                null, // collideCallback (충돌 후 처리)
+                (player, tile) => { // processCallback (충돌 여부 결정)
+                    // 점프 중이면 충돌 무시 (false 반환)
+                    if (this.player.getData('isJumping')) return false;
+                    return true;
+                }, 
+                this
+            );
+        }
+
+        // 2. [신규] Block 충돌 (절대 못 지나감)
+        if (blockLayer) {
+            this.blockCollider = this.scene.physics.add.collider(this.player, blockLayer);
         }
 
         this.player.setDrag(500); 
