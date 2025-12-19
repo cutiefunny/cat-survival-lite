@@ -1,13 +1,12 @@
 import { defineConfig } from 'vite';
 import solidPlugin from 'vite-plugin-solid';
 import { VitePWA } from 'vite-plugin-pwa';
-import { resolve } from 'path'; // [추가] 경로 해결을 위해 필요
+import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [
     solidPlugin(),
     VitePWA({
-      // ... 기존 PWA 설정 그대로 유지 ...
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg', 'images/*.png', 'images/*.json'],
       manifest: {
@@ -38,18 +37,30 @@ export default defineConfig({
         ]
       },
       workbox: {
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // [최적화] 캐시 제한을 조금 늘려 Phaser 허용
         globPatterns: ['**/*.{js,css,html,ico,png,svg,json}']
       }
     })
   ],
-  // [추가] 빌드 설정: 멀티 페이지 앱(MPA) 구성
   build: {
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
         admin: resolve(__dirname, 'admin.html')
+      },
+      // [최적화] 수동 청크 분할 (Code Splitting)
+      output: {
+        manualChunks: (id) => {
+          if (id.includes('node_modules')) {
+            if (id.includes('phaser')) {
+              return 'vendor_phaser'; // Phaser 관련은 별도 파일로 분리
+            }
+            return 'vendor'; // 나머지 라이브러리 분리
+          }
+        }
       }
-    }
+    },
+    // [최적화] 청크 크기 경고 기준 상향 (Phaser가 크기 때문)
+    chunkSizeWarningLimit: 1500
   }
 });
