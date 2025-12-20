@@ -10,6 +10,10 @@ import stage1MapUrl from '../assets/maps/stage1.json?url';
 import grassImgUrl from '../assets/tilesets/TX_Tileset_Grass.png?url';
 import treeImgUrl from '../assets/tilesets/TX_Plant.png?url';
 
+// [신규] BGM 파일 import (파일이 src/assets/sounds/stage1_bgm.mp3 위치에 있어야 합니다)
+// 파일이 없으면 에러가 발생하므로, 파일을 먼저 넣고 주석을 해제하거나 코드를 사용하세요.
+import bgmUrl from '../assets/sounds/stage1_bgm.mp3?url'; 
+
 export default class MainScene extends Phaser.Scene {
     constructor() {
         super('MainScene');
@@ -21,6 +25,9 @@ export default class MainScene extends Phaser.Scene {
         this.playerManager = null;
         this.enemyManager = null;
         this.uiManager = null;
+        
+        // [신규] BGM 인스턴스
+        this.bgm = null;
     }
 
     preload() {
@@ -38,6 +45,9 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('grass_img', grassImgUrl);
         this.load.image('tree_img', treeImgUrl);
         this.load.tilemapTiledJSON('stage1_map', stage1MapUrl);
+
+        // [신규] 오디오 로드
+        this.load.audio('stage1_bgm', bgmUrl);
     }
 
     async create() {
@@ -81,6 +91,16 @@ export default class MainScene extends Phaser.Scene {
         // (7) 맵 초기 아이템 스폰
         this.mapManager.spawnInitialItems(map, this.enemyManager); // enemyManager를 통해 스폰
 
+        // [신규] BGM 재생
+        // 이미 재생 중이라면 중복 재생 방지
+        if (!this.bgm || !this.bgm.isPlaying) {
+            this.bgm = this.sound.add('stage1_bgm', { 
+                loop: true,      // 무한 반복
+                volume: 0.5      // 볼륨 (0.0 ~ 1.0)
+            });
+            this.bgm.play();
+        }
+
         // 이벤트 emit
         this.game.events.emit('main-scene-ready', this);
     }
@@ -94,7 +114,13 @@ export default class MainScene extends Phaser.Scene {
     }
 
     update(time, delta) {
-        if (this.data.get('gameOver')) return;
+        if (this.data.get('gameOver')) {
+            // [신규] 게임 오버 시 BGM 정지 (선택 사항: 원치 않으면 이 부분을 주석 처리)
+            if (this.bgm && this.bgm.isPlaying) {
+                this.bgm.stop();
+            }
+            return;
+        }
         if (!this.config || Object.keys(this.config).length === 0) return;
 
         // 최적화: 프레임 카운트
