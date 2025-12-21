@@ -10,6 +10,10 @@ export default class EnemyManager {
         this.stageMiceKilled = 0;
         this.stageMiceTotal = 0;
         this.stageButterflySpawned = false;
+        
+        // [수정] 통계용 변수
+        this.startTime = 0;
+        this.isStageTimerStarted = false; // 타이머 시작 대기 플래그
     }
 
     setupGroupsAndColliders(player, wallLayer, blockLayer) {
@@ -75,7 +79,12 @@ export default class EnemyManager {
         this.stageMiceKilled = 0; 
         this.stageButterflySpawned = false;
 
-        // [신규] 남은 쥐 숫자 데이터 초기화
+        // [수정] 타이머 초기화 로직 변경
+        // 여기서 바로 startTime을 찍지 않고, 플래그만 세웁니다.
+        // 실제 시간은 update()가 처음 호출될 때(게임이 실제로 재개될 때) 찍습니다.
+        this.isStageTimerStarted = false; 
+        
+        this.scene.data.set('damageTaken', 0);
         this.scene.data.set('remainingMice', this.stageMiceTotal);
 
         const mice = this.scene.data.get('mice');
@@ -110,7 +119,6 @@ export default class EnemyManager {
             }
         }
         
-        // UI 갱신 요청 (점수판 등)
         const drawUI = this.scene.data.get('drawUI');
         if (drawUI) drawUI();
     }
@@ -194,6 +202,14 @@ export default class EnemyManager {
     }
 
     update(time, delta, runAiLogic, runSeparationLogic) {
+        // [수정] 게임이 실제로 재개된 첫 프레임에 시간을 기록합니다.
+        // 모달이나 상점이 떠있는 동안(Paused 상태)에는 update가 호출되지 않으므로,
+        // 이 로직은 "플레이어가 움직일 수 있게 된 순간"에 실행됩니다.
+        if (!this.isStageTimerStarted) {
+            this.startTime = time; // 현재 게임 시간을 시작 시간으로 설정
+            this.isStageTimerStarted = true;
+        }
+
         if (!runAiLogic) {
             this._updateButterflies(delta);
             return;
@@ -385,12 +401,19 @@ export default class EnemyManager {
 
         this.stageMiceKilled += 1;
 
-        // [신규] 남은 쥐 숫자 업데이트
+        // 남은 쥐 숫자 업데이트
         const remaining = this.stageMiceTotal - this.stageMiceKilled;
         this.scene.data.set('remainingMice', remaining);
 
         const drawUI = this.scene.data.get('drawUI');
         if (drawUI) drawUI();
+
+        // 냠냠 애니메이션 재생
+        player.setData('isEating', true);
+        player.play('cat_eat', true);
+        player.once('animationcomplete-cat_eat', () => {
+            player.setData('isEating', false);
+        });
 
         if (this.stageMiceKilled >= this.stageMiceTotal) {
             this.clearStage();
@@ -419,6 +442,10 @@ export default class EnemyManager {
             let energy = player.getData('energy') - 1;
             player.setData('energy', energy);
             
+            // 데미지 통계 증가
+            const currentDamage = this.scene.data.get('damageTaken') || 0;
+            this.scene.data.set('damageTaken', currentDamage + 1);
+
             if (energy <= 0) {
                 this.endGame();
                 return;
@@ -447,7 +474,7 @@ export default class EnemyManager {
             player.setData('energy', energy + 1);
         }
 
-        // 2. [신규] 기력(Stamina) 완전 회복
+        // 2. 기력(Stamina) 완전 회복
         const maxStamina = player.getData('maxStamina');
         player.setData('stamina', maxStamina);
     }
@@ -463,10 +490,39 @@ export default class EnemyManager {
 
     clearStage() {
         console.log('Stage Cleared!');
-        const openShopModal = this.scene.data.get('openShopModal');
-        if (openShopModal) {
-            openShopModal(this.currentStage, this.scene.data.get('score')); 
+
+        // 통계 및 점수 계산
+        const endTime = this.scene.time.now;
+        const duration = endTime - this.startTime; // 밀리초
+        const damage = this.scene.data.get('damageTaken') || 0;
+        
+        // 남은 생선 수 계산
+        const fishItems = this.scene.data.get('fishItems');
+        const remainingFish = fishItems ? fishItems.countActive() : 0;
+
+        // 점수 공식: 
+        // - 시간 보너스: (60초 - 소요시간) * 10점 (최소 0점)
+        // - 생선 보너스: 마리당 200점
+        // - 데미지 페널티: 피격당 -50점
+        const durationSec = Math.floor(duration / 1000);
+        const timeBonus = Math.max(0, 60 - durationSec) * 10;
+        const fishBonus = remainingFish * 200;
+        const damagePenalty = damage * 50;
+        
+        const stageScore = Math.max(0, timeBonus + fishBonus - damagePenalty);
+        
+        // 스테이지 클리어 모달 호출
+        const openStageClearModal = this.scene.data.get('openStageClearModal');
+        if (openStageClearModal) {
+            openStageClearModal({
+                stage: this.currentStage,
+                timeMs: duration,
+                damage: damage,
+                fish: remainingFish,
+                score: stageScore
+            });
         }
+        
         this.currentStage += 1;
         this.startStage(this.currentStage);
     }

@@ -109,17 +109,14 @@ export default class PlayerManager {
                 const currentSpeed = this.player.body ? this.player.body.velocity.length() : 0;
                 const skills = this.scene.data.get('skills') || [];
                 let maxSpeed = this.config.BASE_PLAYER_SPEED;
-                if (skills.includes(21)) maxSpeed *= 1.1; // 스피드 업 스킬 반영
+                if (skills.includes(21)) maxSpeed *= 1.1; 
 
                 // 2. 속도에 따른 회복 배율 설정
                 if (currentSpeed < 10) {
-                    // [Case A] 거의 정지 상태 -> 3배 회복
                     regenMultiplier = 3;
                 } else if (currentSpeed <= maxSpeed * 0.5) {
-                    // [Case B] 최대 속도의 절반 이하 (살금살금) -> 2배 회복
                     regenMultiplier = 2;
                 } else {
-                    // [Case C] 빠른 이동 -> 기본 회복 (1배)
                     regenMultiplier = 1;
                 }
 
@@ -151,8 +148,6 @@ export default class PlayerManager {
 
             if (this.joyStick && this.joyStick.force > 0) {
                 if (moveX === 0 && moveY === 0) {
-                    // 조이스틱의 기울기(force)를 반영하여 속도 조절
-                    // force가 radius보다 작으면 천천히 걷게 됨 -> 스태미나 2배 회복 가능
                     const force = Math.min(this.joyStick.force, this.joyStick.radius) / this.joyStick.radius;
                     const rotation = this.joyStick.rotation;
                     moveX = Math.cos(rotation) * force;
@@ -161,14 +156,11 @@ export default class PlayerManager {
             }
 
             if (moveX !== 0 || moveY !== 0) {
-                // 키보드는 항상 최대 속도(length > 1이면 normalize됨)지만, 조이스틱은 force에 따라 낮을 수 있음
-                // 정규화는 키보드 입력 등 벡터 합이 1을 초과할 때만 수행하여 조이스틱의 미세 컨트롤 보존
                 const len = Math.sqrt(moveX * moveX + moveY * moveY);
                 if (len > 1) {
                     moveX /= len;
                     moveY /= len;
                 }
-                
                 this.player.setVelocity(moveX * speed, moveY * speed);
                 this.player.setFlipX(moveX > 0);
                 this.scene.data.set('isMoving', true);
@@ -214,9 +206,16 @@ export default class PlayerManager {
         const isHaak = this.scene.data.get('isHaak');
         const isJumping = this.scene.data.get('isJumping');
         const isMoving = this.scene.data.get('isMoving');
+        // [신규] 먹는 상태 확인
+        const isEating = this.player.getData('isEating'); 
         
         if (isInvincible) {
             this.player.setTexture('cat_hit');
+        } else if (isEating) { 
+            // [신규] 먹는 애니메이션이 아니라면 재생 (이미 재생 중이면 유지)
+            if (this.player.anims.currentAnim?.key !== 'cat_eat') {
+                this.player.play('cat_eat', true);
+            }
         } else if (isHaak) {
             this.player.setTexture('cat_haak');
         } else if (isJumping) {
@@ -280,7 +279,6 @@ export default class PlayerManager {
 
                 if (this.wallCollider) this.wallCollider.active = true;
                 
-                // [신규] 착지 시점에 적이 있는지 즉시 확인하여 충돌 처리 강제 수행
                 this._checkLandingCollision();
             }
         });

@@ -3,6 +3,7 @@ import { useSkills } from './SkillsContext';
 
 import ShopModal from './ShopModal';
 import GameOverModal from './GameOverModal';
+import StageClearModal from './StageClearModal'; // [신규] Import
 import * as Config from '../constants/GameConfig';
 import MainScene from '../game/MainScene';
 
@@ -11,6 +12,19 @@ export default function GameCanvas(props) {
 
   const [showShopModal, setShowShopModal] = createSignal(false);
   const [showGameOverModal, setShowGameOverModal] = createSignal(false);
+  
+  // [신규] 클리어 모달 관련 상태
+  const [showStageClearModal, setShowStageClearModal] = createSignal(false);
+  const [stageClearStats, setStageClearStats] = createSignal({ stage: 1, timeMs: 0, damage: 0, fish: 0, score: 0 });
+  // const [showStageClearModal, setShowStageClearModal] = createSignal(true); 
+  // const [stageClearStats, setStageClearStats] = createSignal({ 
+  //     stage: 1, 
+  //     timeMs: 45000,   // 45초
+  //     damage: 2, 
+  //     fish: 15, 
+  //     score: 1250 
+  // });
+
   const [currentScore, setCurrentScore] = createSignal(0);
   const [currentLevel, setCurrentLevel] = createSignal(1);
   const [finalScore, setFinalScore] = createSignal(0);
@@ -74,11 +88,18 @@ export default function GameCanvas(props) {
     
     setShowGameOverModal(false);
     setShowShopModal(false);
+    setShowStageClearModal(false); // [신규] 초기화
     
     if (game) {
         const scene = game.scene.getScene('MainScene');
         if (scene) scene.scene.restart();
     }
+  };
+
+  // [신규] 클리어 모달에서 '다음' 버튼 누를 때 -> 상점으로 이동
+  const handleClearNext = () => {
+    setShowStageClearModal(false);
+    setShowShopModal(true); // 바로 상점을 엽니다
   };
 
   const handleActionStart = (e) => {
@@ -147,6 +168,17 @@ export default function GameCanvas(props) {
 
     game.events.on('ready', () => {
         game.events.on('main-scene-ready', (scene) => {
+            // [신규] 스테이지 클리어 모달 열기 핸들러
+            scene.data.set('openStageClearModal', (stats) => {
+                setStageClearStats(stats);
+                setCurrentScore(prev => prev + stats.score); // 보너스 점수 누적
+                setCurrentLevel(stats.stage + 1); // 다음 레벨 설정
+                
+                setShowStageClearModal(true);
+                scene.scene.pause(); // 게임 일시정지
+            });
+
+            // 기존 ShopModal 핸들러 (이제는 직접 호출되지 않고 로직 흐름상 ClearModal 다음 단계로 사용됨)
             scene.data.set('openShopModal', (level, score) => {
                 setCurrentLevel(level);
                 setCurrentScore(score);
@@ -179,14 +211,6 @@ export default function GameCanvas(props) {
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <div ref={gameContainer} style={{ width: '100%', height: '100%' }}></div>
 
-      {/* [변경 사항]
-          기존: !hasShockwaveSkill() || isShockwaveReady()
-          -> 스킬이 없을 때(기본 점프) 버튼이 항상 보였음.
-          
-          변경: hasShockwaveSkill() && isShockwaveReady()
-          -> 스킬을 보유하고 + 쿨타임이 찼을 때(준비됨)만 버튼 표시 (⚡).
-          -> 즉, 기본 점프 버튼(⬆️)은 더 이상 보이지 않음.
-      */}
       <Show when={hasShockwaveSkill() && isShockwaveReady()}>
         <div 
             className="action-btn-container"
@@ -202,6 +226,13 @@ export default function GameCanvas(props) {
             </div>
         </div>
       </Show>
+
+      {/* [신규] 스테이지 클리어 모달 */}
+      <StageClearModal 
+        isVisible={showStageClearModal()}
+        stats={stageClearStats()}
+        onNext={handleClearNext}
+      />
 
       <ShopModal 
         isVisible={showShopModal()} 

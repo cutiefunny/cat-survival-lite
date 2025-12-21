@@ -1,0 +1,102 @@
+/* 기본 (PC 및 공통) 스타일 */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1100;
+    backdrop-filter: blur(3px); /* 배경 흐림 효과 추가 */
+}
+
+.modal-content {
+    background-color: #fff;
+    padding: 40px;
+    border-radius: 20px;
+    text-align: center;
+    width: 400px; /* PC 기본 너비 */
+    max-width: 90%;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    border: 4px solid #4CAF50; /* 테두리 포인트 */
+    animation: popUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* 팝업 애니메이션 */
+}
+
+.modal-title {
+    color: #4CAF50;
+    margin: 0 0 25px 0;
+    font-size: 2.5em;
+    font-family: 'Arial Black', sans-serif;
+    text-shadow: 2px 2px 0px #eee;
+}
+
+.stat-container {
+    background-color: #f0f8f0;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 25px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.2em;
+    color: #555;
+    padding: 4px 0;
+}
+
+.stat-value {
+    font-weight: bold;
+    color: #333;
+}
+
+.next-button {
+    padding: 15px 40px;
+    background: linear-gradient(145deg, #4CAF50, #45a049);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    font-size: 1.2em;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    transition: transform 0.1s, box-shadow 0.1s;
+    width: 100%; /* 버튼 꽉 차게 */
+}
+
+.next-button:active {
+    transform: scale(0.98);
+    box-shadow: 0 2px 3px rgba(0,0,0,0.2);
+}
+
+/* 팝업 애니메이션 키프레임 */
+@keyframes popUp {
+    from { transform: scale(0.8); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+/* --- 모바일 전용 스타일 (화면 너비 600px 이하) --- */
+@media (max-width: 600px) {
+    .modal-content {
+        padding: 25px;
+        width: 85%; /* 모바일에서는 화면의 85% 차지 */
+    }
+
+    .modal-title {
+        font-size: 1.8em; /* 타이틀 크기 축소 */
+        margin-bottom: 15px;
+    }
+
+    .stat-row {
+        font-size: 1em; /* 텍스트 크기 축소 */
+    }
+    
+    .next-button {
+        font-size: 1.1em;
+        padding: 12px 20px;
+    }
+}

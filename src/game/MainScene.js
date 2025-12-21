@@ -35,6 +35,10 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('cat_punch', '/images/cat_punch.png');
         this.load.image('cat_jump', '/images/cat_jump.png');
         this.load.image('cat_hit', '/images/cat_hit.png');
+        
+        // [신규] 쥐 먹는 애니메이션 스프라이트 로드 (200x100, 2프레임 -> 1프레임당 100x100)
+        this.load.spritesheet('cat_eat', '/images/cat-eat.png', { frameWidth: 100, frameHeight: 100 });
+
         this.load.spritesheet('mouse_enemy_sprite', '/images/mouse_2frame_sprite.png', { frameWidth: 100, frameHeight: 64 });
         this.load.spritesheet('dog_enemy_sprite', '/images/dog_2frame_horizontal.png', { frameWidth: 100, frameHeight: 100 });
         this.load.spritesheet('fish_item_sprite', '/images/fish_sprite_2frame.png', { frameWidth: 100, frameHeight: 100 });
@@ -42,7 +46,6 @@ export default class MainScene extends Phaser.Scene {
         this.load.image('cat_cry', '/images/cat_cry.png');
         this.load.image('cat_haak', '/images/cat_haak.png');
         
-        // [신규] UI용 쥐 아이콘 로드
         this.load.image('mouse_icon', '/images/mouse.png');
 
         this.load.image('grass_img', grassImgUrl);
@@ -96,6 +99,7 @@ export default class MainScene extends Phaser.Scene {
 
         // [신규] BGM 재생
         // 이미 재생 중이라면 중복 재생 방지
+        // 테스트하려면 주석처리
         if (!this.bgm || !this.bgm.isPlaying) {
             this.bgm = this.sound.add('stage1_bgm', { 
                 loop: true,      // 무한 반복
@@ -114,6 +118,14 @@ export default class MainScene extends Phaser.Scene {
         this.anims.create({ key: 'dog_walk', frames: this.anims.generateFrameNumbers('dog_enemy_sprite', { start: 0, end: 1 }), frameRate: 6, repeat: -1 });
         this.anims.create({ key: 'fish_swim', frames: this.anims.generateFrameNumbers('fish_item_sprite', { start: 0, end: 1 }), frameRate: 4, repeat: -1 });
         this.anims.create({ key: 'butterfly_fly', frames: this.anims.generateFrameNumbers('butterfly_sprite_3frame', { start: 0, end: 2 }), frameRate: 8, repeat: -1 });
+        
+        // [신규] 쥐 먹기 애니메이션 (반복 없음)
+        this.anims.create({ 
+            key: 'cat_eat', 
+            frames: this.anims.generateFrameNumbers('cat_eat', { start: 0, end: 1 }), 
+            frameRate: 10, 
+            repeat: 0 
+        });
     }
 
     update(time, delta) {
