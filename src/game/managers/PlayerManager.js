@@ -101,8 +101,30 @@ export default class PlayerManager {
         if (now - this.lastStaminaUseTime > this.config.STAMINA_REGEN_DELAY_MS) {
             const currentStamina = this.player.getData('stamina');
             const maxStamina = this.config.PLAYER_MAX_STAMINA;
+            
             if (currentStamina < maxStamina) {
-                const regenAmount = this.config.STAMINA_REGEN_RATE * (delta / 1000);
+                let regenMultiplier = 1;
+
+                // 1. 현재 속도 및 최대 속도 계산
+                const currentSpeed = this.player.body ? this.player.body.velocity.length() : 0;
+                const skills = this.scene.data.get('skills') || [];
+                let maxSpeed = this.config.BASE_PLAYER_SPEED;
+                if (skills.includes(21)) maxSpeed *= 1.1; // 스피드 업 스킬 반영
+
+                // 2. 속도에 따른 회복 배율 설정
+                if (currentSpeed < 10) {
+                    // [Case A] 거의 정지 상태 -> 3배 회복
+                    regenMultiplier = 3;
+                } else if (currentSpeed <= maxSpeed * 0.5) {
+                    // [Case B] 최대 속도의 절반 이하 (살금살금) -> 2배 회복
+                    regenMultiplier = 2;
+                } else {
+                    // [Case C] 빠른 이동 -> 기본 회복 (1배)
+                    regenMultiplier = 1;
+                }
+
+                // 3. 회복 적용
+                const regenAmount = (this.config.STAMINA_REGEN_RATE * regenMultiplier) * (delta / 1000);
                 const nextStamina = Math.min(maxStamina, currentStamina + regenAmount);
                 this.player.setData('stamina', nextStamina);
             }
@@ -129,6 +151,8 @@ export default class PlayerManager {
 
             if (this.joyStick && this.joyStick.force > 0) {
                 if (moveX === 0 && moveY === 0) {
+                    // 조이스틱의 기울기(force)를 반영하여 속도 조절
+                    // force가 radius보다 작으면 천천히 걷게 됨 -> 스태미나 2배 회복 가능
                     const force = Math.min(this.joyStick.force, this.joyStick.radius) / this.joyStick.radius;
                     const rotation = this.joyStick.rotation;
                     moveX = Math.cos(rotation) * force;
@@ -137,11 +161,14 @@ export default class PlayerManager {
             }
 
             if (moveX !== 0 || moveY !== 0) {
+                // 키보드는 항상 최대 속도(length > 1이면 normalize됨)지만, 조이스틱은 force에 따라 낮을 수 있음
+                // 정규화는 키보드 입력 등 벡터 합이 1을 초과할 때만 수행하여 조이스틱의 미세 컨트롤 보존
                 const len = Math.sqrt(moveX * moveX + moveY * moveY);
                 if (len > 1) {
                     moveX /= len;
                     moveY /= len;
                 }
+                
                 this.player.setVelocity(moveX * speed, moveY * speed);
                 this.player.setFlipX(moveX > 0);
                 this.scene.data.set('isMoving', true);
@@ -192,12 +219,15 @@ export default class PlayerManager {
             this.player.setTexture('cat_hit');
         } else if (isHaak) {
             this.player.setTexture('cat_haak');
+        } else if (isJumping) {
+            this.player.anims.stop(); 
+            this.player.setTexture('cat_jump');
         } else {
-            if (isMoving && !isJumping) {
+            if (isMoving) {
                 this.player.anims.play('cat_walk', true);
             } else {
                 this.player.anims.stop();
-                if (!isJumping) this.player.setTexture('player_sprite'); 
+                this.player.setTexture('player_sprite'); 
                 this.player.setFrame(0);
             }
         }
@@ -212,7 +242,6 @@ export default class PlayerManager {
 
         const stamina = this.player.getData('stamina');
         if (stamina < this.config.STAMINA_JUMP_COST) {
-            // [신규] 기력 부족 이벤트 발생 -> UIManager가 처리
             this.scene.events.emit('stamina-warning');
             return; 
         }
@@ -250,8 +279,31 @@ export default class PlayerManager {
                 this.player.setDrag(500); 
 
                 if (this.wallCollider) this.wallCollider.active = true;
+                
+                // [신규] 착지 시점에 적이 있는지 즉시 확인하여 충돌 처리 강제 수행
+                this._checkLandingCollision();
             }
         });
+    }
+
+    _checkLandingCollision() {
+        const enemyManager = this.scene.enemyManager;
+        if (!enemyManager || this.scene.data.get('gameOver')) return;
+
+        const mice = this.scene.data.get('mice');
+        const dogs = this.scene.data.get('dogs');
+
+        if (mice) {
+            this.scene.physics.overlap(this.player, mice, (player, mouse) => {
+                enemyManager.hitMouse(player, mouse);
+            }, null, enemyManager);
+        }
+
+        if (dogs) {
+            this.scene.physics.overlap(this.player, dogs, (player, dog) => {
+                enemyManager.hitDog(player, dog);
+            }, null, enemyManager);
+        }
     }
 
     triggerShockwave() {

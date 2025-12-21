@@ -11,7 +11,6 @@ import grassImgUrl from '../assets/tilesets/TX_Tileset_Grass.png?url';
 import treeImgUrl from '../assets/tilesets/TX_Plant.png?url';
 
 // [신규] BGM 파일 import (파일이 src/assets/sounds/stage1_bgm.mp3 위치에 있어야 합니다)
-// 파일이 없으면 에러가 발생하므로, 파일을 먼저 넣고 주석을 해제하거나 코드를 사용하세요.
 import bgmUrl from '../assets/sounds/stage1_bgm.mp3?url'; 
 
 export default class MainScene extends Phaser.Scene {
@@ -34,6 +33,7 @@ export default class MainScene extends Phaser.Scene {
         // --- 리소스 로드 ---
         this.load.spritesheet('player_sprite', '/images/cat_walk_3frame_sprite.png', { frameWidth: 100, frameHeight: 100 });
         this.load.image('cat_punch', '/images/cat_punch.png');
+        this.load.image('cat_jump', '/images/cat_jump.png');
         this.load.image('cat_hit', '/images/cat_hit.png');
         this.load.spritesheet('mouse_enemy_sprite', '/images/mouse_2frame_sprite.png', { frameWidth: 100, frameHeight: 64 });
         this.load.spritesheet('dog_enemy_sprite', '/images/dog_2frame_horizontal.png', { frameWidth: 100, frameHeight: 100 });
@@ -41,6 +41,9 @@ export default class MainScene extends Phaser.Scene {
         this.load.spritesheet('butterfly_sprite_3frame', '/images/butterfly_sprite_3frame.png', { frameWidth: 100, frameHeight: 83 });
         this.load.image('cat_cry', '/images/cat_cry.png');
         this.load.image('cat_haak', '/images/cat_haak.png');
+        
+        // [신규] UI용 쥐 아이콘 로드
+        this.load.image('mouse_icon', '/images/mouse.png');
 
         this.load.image('grass_img', grassImgUrl);
         this.load.image('tree_img', treeImgUrl);

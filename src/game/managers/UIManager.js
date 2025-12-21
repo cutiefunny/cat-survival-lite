@@ -5,159 +5,106 @@ export default class UIManager {
         this.scene = scene;
         this.config = config;
         
-        this.energyBarBg = null;
-        this.staminaBarBg = null;
-        this.expBarBg = null;
-        this.energyBarFill = null;
-        this.staminaBarFill = null;
-        this.expBarFill = null;
-        this.shockwaveCooldownText = null;
-
-        this.isStaminaWarning = false; // 현재 그리기 색상 결정용 플래그
-        this.isStaminaWarningProcessing = false; // [신규] 깜빡임 애니메이션 중복 실행 방지 플래그
+        // HUD 요소
+        // [수정] Score 텍스트 제거
+        
+        // [신규] 쥐 카운터 UI
+        this.mouseIcon = null;
+        this.mouseText = null;
+        
+        // [신규] 캐릭터 머리 위 플로팅 바 컨테이너
+        this.floatingBarContainer = null;
+        this.floatingEnergy = null;
+        this.floatingStamina = null;
     }
 
     createUI(player) {
-        this.energyBarBg = this.scene.add.graphics();
-        this.staminaBarBg = this.scene.add.graphics();
-        this.expBarBg = this.scene.add.graphics();
-        this.energyBarFill = this.scene.add.graphics();
-        this.staminaBarFill = this.scene.add.graphics();
-        this.expBarFill = this.scene.add.graphics();
+        // --- [수정] 남은 쥐 표시 UI를 왼쪽 상단(Score 있던 자리)으로 이동 ---
         
-        const graphics = [this.energyBarBg, this.staminaBarBg, this.expBarBg, this.energyBarFill, this.staminaBarFill, this.expBarFill];
-        graphics.forEach(g => {
-            g.setScrollFactor(0);
-            g.setDepth(10);
-        });
+        // 쥐 아이콘 (위치: x=35, y=35) - 이미지 origin이 (0.5, 0.5)이므로 좌표 조정
+        this.mouseIcon = this.scene.add.image(35, 35, 'mouse_icon')
+            .setScrollFactor(0)
+            .setDepth(100)
+            .setScale(0.5); 
 
-        this.shockwaveCooldownText = this.scene.add.text(player.x, player.y, '', {
-            fontSize: '18px', color: '#FFFF00', stroke: '#000000', strokeThickness: 4, align: 'center', fontStyle: 'bold'
-        });
-        this.shockwaveCooldownText.setOrigin(0.5, 1.5);
-        this.shockwaveCooldownText.setDepth(11);
-        this.shockwaveCooldownText.setVisible(false);
-        this.scene.data.set('shockwaveCooldownText', this.shockwaveCooldownText);
+        // 남은 숫자 텍스트 (아이콘 옆, y=20은 기존 Score와 동일 높이)
+        this.mouseText = this.scene.add.text(60, 20, ': 0', { 
+            fontSize: '32px', 
+            fill: '#fff',
+            fontFamily: 'Arial',
+            stroke: '#000',
+            strokeThickness: 4
+        }).setScrollFactor(0).setDepth(100);
 
-        const drawUI = () => { this._drawUI(player); };
-        this.scene.data.set('drawUI', drawUI);
+        // --- 2. [신규] 캐릭터 따라다니는 플로팅 바 ---
+        this.floatingBarContainer = this.scene.add.container(0, 0).setDepth(99);
         
+        this.floatingEnergy = this.scene.add.graphics();
+        this.floatingStamina = this.scene.add.graphics();
+        
+        this.floatingBarContainer.add([this.floatingEnergy, this.floatingStamina]);
+
         // 초기 그리기
-        drawUI(); 
-        
-        player.on('changedata-energy', drawUI);
-        player.on('changedata-stamina', drawUI);
-        
-        // 기력 부족 경고 이벤트 리스너 등록
-        this.scene.events.on('stamina-warning', this._triggerStaminaWarning, this);
-
-        const setShockwaveReady = (isReady) => {};
-        this.scene.data.set('setShockwaveReady', setShockwaveReady);
-    }
-
-    // [수정] 기력 부족 시 깜빡임(Blink) 효과 실행
-    _triggerStaminaWarning() {
-        if (this.isStaminaWarningProcessing) return; // 이미 깜빡이는 중이면 중복 실행 방지
-        
-        this.isStaminaWarningProcessing = true;
-        let blinkCount = 0;
-        const maxBlinks = 4; // ON -> OFF -> ON -> OFF (총 2회 깜빡임)
-
-        // 1. 즉시 빨간색(ON)
-        this.isStaminaWarning = true;
-        this._forceUpdateUI();
-        blinkCount++;
-
-        // 2. 100ms 간격으로 토글
-        const timer = this.scene.time.addEvent({
-            delay: 100,
-            loop: true,
-            callback: () => {
-                this.isStaminaWarning = !this.isStaminaWarning; // 색상 반전
-                this._forceUpdateUI();
-                blinkCount++;
-
-                // 지정된 횟수만큼 깜빡였으면 종료
-                if (blinkCount >= maxBlinks) {
-                    this.isStaminaWarning = false; // 원래 색으로 복구
-                    this._forceUpdateUI();
-                    this.isStaminaWarningProcessing = false; // 락 해제
-                    timer.remove();
-                }
-            }
-        });
-    }
-
-    _forceUpdateUI() {
-        const player = this.scene.data.get('player');
-        if (player) this._drawUI(player);
-    }
-
-    _drawUI(player) {
-        if (!player.active) return;
-        const screenWidth = this.scene.cameras.main.width;
-        
-        const barWidth = this.config.ENERGY_BAR_WIDTH;
-        const barX = screenWidth / 2 - (barWidth / 2);
-        
-        const energyY = 20;
-        const staminaY = energyY + this.config.ENERGY_BAR_HEIGHT + 4;
-        const expY = staminaY + this.config.STAMINA_BAR_HEIGHT + 4;
-
-        // 1. Energy
-        const currentEnergy = player.getData('energy');
-        const maxEnergy = player.getData('maxEnergy');
-        const energyPercent = Phaser.Math.Clamp(currentEnergy / maxEnergy, 0, 1);
-        
-        this.energyBarBg.clear().fillStyle(0x000000, 0.5).fillRect(barX, energyY, this.config.ENERGY_BAR_WIDTH, this.config.ENERGY_BAR_HEIGHT);
-        this.energyBarFill.clear().fillStyle(0x00ff00, 1).fillRect(barX, energyY, this.config.ENERGY_BAR_WIDTH * energyPercent, this.config.ENERGY_BAR_HEIGHT);
-
-        // 2. Stamina (경고 플래그에 따라 빨간색 or 기본색)
-        const currentStamina = player.getData('stamina');
-        const maxStamina = player.getData('maxStamina');
-        const staminaPercent = Phaser.Math.Clamp(currentStamina / maxStamina, 0, 1);
-        
-        const staminaColor = this.isStaminaWarning ? 0xFF0000 : this.config.STAMINA_BAR_COLOR;
-
-        this.staminaBarBg.clear().fillStyle(0x000000, 0.5).fillRect(barX, staminaY, this.config.STAMINA_BAR_WIDTH, this.config.STAMINA_BAR_HEIGHT);
-        this.staminaBarFill.clear().fillStyle(staminaColor, 1).fillRect(barX, staminaY, this.config.STAMINA_BAR_WIDTH * staminaPercent, this.config.STAMINA_BAR_HEIGHT);
-
-        // 3. EXP
-        const totalMice = this.scene.enemyManager ? this.scene.enemyManager.stageMiceTotal : 1;
-        const killedMice = this.scene.enemyManager ? this.scene.enemyManager.stageMiceKilled : 0;
-        const progressPercent = Phaser.Math.Clamp(killedMice / totalMice, 0, 1);
-        
-        this.expBarBg.clear().fillStyle(0x000000, 0.5).fillRect(barX, expY, this.config.EXP_BAR_WIDTH, this.config.EXP_BAR_HEIGHT);
-        this.expBarFill.clear().fillStyle(0xffff00, 1).fillRect(barX, expY, this.config.EXP_BAR_WIDTH * progressPercent, this.config.EXP_BAR_HEIGHT);
+        this.updateFloatingBars(player);
     }
 
     update() {
-        const skills = this.scene.data.get('skills') || [];
-        const hasShockwave = skills.includes(this.config.SHOCKWAVE_SKILL_ID);
         const player = this.scene.data.get('player');
-
-        if (hasShockwave && this.scene.data.get('shockwaveReady') === undefined) {
-             this.scene.data.set('shockwaveReady', false);
-             this.scene.data.set('shockwaveReady', true); 
+        if (!player || !player.active) {
+            if (this.floatingBarContainer) this.floatingBarContainer.setVisible(false);
+            return;
         }
 
-        if (hasShockwave && this.shockwaveCooldownText && player && player.active) {
-             this.shockwaveCooldownText.setPosition(player.x, player.y - (player.displayHeight / 2) * player.scaleY - 40);
-             this.shockwaveCooldownText.setVisible(true);
-             const isReady = this.scene.data.get('shockwaveReady');
-             
-             if (isReady) {
-                 this.shockwaveCooldownText.setText('⚡');
-             } else {
-                 const timer = this.scene.data.get('shockwaveTimerEvent');
-                 if (timer) {
-                     const remain = timer.getRemaining(); 
-                     const remainSec = Math.ceil(remain / 1000);
-                     this.shockwaveCooldownText.setText(remainSec);
-                 }
-             }
-        } else if (this.shockwaveCooldownText) {
-             this.shockwaveCooldownText.setVisible(false);
+        // --- 위치 동기화 ---
+        this.floatingBarContainer.setPosition(player.x, player.y - 60);
+        this.floatingBarContainer.setVisible(true);
+
+        // --- 값 변경 감지 및 다시 그리기 ---
+        this.updateFloatingBars(player);
+        
+        // [수정] Score 텍스트 업데이트 로직 제거
+
+        // [신규] 남은 쥐 숫자 업데이트
+        const remainingMice = this.scene.data.get('remainingMice') || 0;
+        if (this.mouseText) {
+            this.mouseText.setText(`: ${remainingMice}`);
         }
+    }
+
+    updateFloatingBars(player) {
+        // 데이터 가져오기
+        const energy = player.getData('energy') || 0;
+        const maxEnergy = player.getData('maxEnergy') || 10;
+        const stamina = player.getData('stamina') || 0;
+        const maxStamina = player.getData('maxStamina') || 100;
+
+        // 크기 설정
+        const width = 80;
+        const height = 8;
+        const x = -width / 2; // 중앙 정렬
+
+        // 1. 에너지 바 (체력 - 녹색)
+        this.floatingEnergy.clear();
+        
+        // 배경 (검정)
+        this.floatingEnergy.fillStyle(0x000000, 0.6);
+        this.floatingEnergy.fillRect(x, 0, width, height);
+        
+        // 전경 (녹색)
+        const energyRatio = Math.max(0, energy / maxEnergy);
+        this.floatingEnergy.fillStyle(0x00ff00, 1);
+        this.floatingEnergy.fillRect(x, 0, width * energyRatio, height);
+
+        // 2. 기력 바 (스태미나 - 노랑)
+        this.floatingStamina.clear();
+        
+        // 배경 (검정)
+        this.floatingStamina.fillStyle(0x000000, 0.6);
+        this.floatingStamina.fillRect(x, height + 2, width, height / 2);
+        
+        // 전경 (노랑)
+        const staminaRatio = Math.max(0, stamina / maxStamina);
+        this.floatingStamina.fillStyle(0xffff00, 1);
+        this.floatingStamina.fillRect(x, height + 2, width * staminaRatio, height / 2);
     }
 }

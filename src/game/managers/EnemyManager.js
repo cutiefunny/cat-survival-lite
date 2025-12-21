@@ -75,6 +75,9 @@ export default class EnemyManager {
         this.stageMiceKilled = 0; 
         this.stageButterflySpawned = false;
 
+        // [신규] 남은 쥐 숫자 데이터 초기화
+        this.scene.data.set('remainingMice', this.stageMiceTotal);
+
         const mice = this.scene.data.get('mice');
         const dogs = this.scene.data.get('dogs');
         mice.clear(true, true);
@@ -381,6 +384,11 @@ export default class EnemyManager {
         if (updateScoreUI) updateScoreUI(score);
 
         this.stageMiceKilled += 1;
+
+        // [신규] 남은 쥐 숫자 업데이트
+        const remaining = this.stageMiceTotal - this.stageMiceKilled;
+        this.scene.data.set('remainingMice', remaining);
+
         const drawUI = this.scene.data.get('drawUI');
         if (drawUI) drawUI();
 
