@@ -7,6 +7,8 @@ export default class PlayerManager {
         this.player = null;
         this.lastStaminaUseTime = 0;
         this.wallCollider = null;
+        this.gamepadButtonState = {}; // 게임패드 버튼 상태 추적
+        this.connectedGamepad = null; // 연결된 게임패드
     }
 
     createPlayer(map, wallLayer, blockLayer) {
@@ -64,6 +66,19 @@ export default class PlayerManager {
         this.scene.data.set('cursors', this.scene.input.keyboard.createCursorKeys());
         this.scene.data.set('spaceKey', this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE));
         this.scene.input.addPointer(2);
+
+        // 게임패드 초기화
+        if (this.scene.input.gamepad) {
+            this.scene.input.gamepad.on('connected', (pad) => {
+                console.log('게임패드 연결됨:', pad.id);
+                this.connectedGamepad = pad;
+            });
+            this.scene.input.gamepad.on('disconnected', () => {
+                console.log('게임패드 연결 해제됨');
+                this.connectedGamepad = null;
+                this.gamepadButtonState = {};
+            });
+        }
 
         if (this.scene.data.get('isMobile')) {
             const joyX = this.scene.cameras.main.width - 120;
@@ -141,17 +156,33 @@ export default class PlayerManager {
             let moveX = 0;
             let moveY = 0;
 
+            // 키보드/화살표 입력
             if (cursors.left.isDown) moveX -= 1;
             if (cursors.right.isDown) moveX += 1;
             if (cursors.up.isDown) moveY -= 1;
             if (cursors.down.isDown) moveY += 1;
 
+            // 가상 조이스틱 입력 (모바일 터치)
             if (this.joyStick && this.joyStick.force > 0) {
                 if (moveX === 0 && moveY === 0) {
                     const force = Math.min(this.joyStick.force, this.joyStick.radius) / this.joyStick.radius;
                     const rotation = this.joyStick.rotation;
                     moveX = Math.cos(rotation) * force;
                     moveY = Math.sin(rotation) * force;
+                }
+            }
+
+            // 게임패드 아날로그 스틱 입력
+            if (this.connectedGamepad && !this.connectedGamepad.disconnected) {
+                const padMoveX = this.connectedGamepad.axes[0]?.getValue() || 0; // 왼쪽 스틱 X
+                const padMoveY = this.connectedGamepad.axes[1]?.getValue() || 0; // 왼쪽 스틱 Y
+                const deadzone = 0.3;
+                
+                if (Math.abs(padMoveX) > deadzone || Math.abs(padMoveY) > deadzone) {
+                    if (moveX === 0 && moveY === 0) {
+                        moveX = padMoveX;
+                        moveY = padMoveY;
+                    }
                 }
             }
 
@@ -177,11 +208,33 @@ export default class PlayerManager {
         let triggerAction = false;
         const spaceKey = this.scene.data.get('spaceKey');
         
-        if (Phaser.Input.Keyboard.JustDown(spaceKey) || 
-            this.scene.data.get('wantToJump') || 
-            this.scene.data.get('isActionBtnPressed')) {
+        // 키보드 입력
+        if (Phaser.Input.Keyboard.JustDown(spaceKey)) {
+            triggerAction = true;
+        }
+        
+        // 터치 입력
+        if (this.scene.data.get('wantToJump')) {
             triggerAction = true;
             this.scene.data.set('wantToJump', false);
+        }
+        
+        // 다른 입력 방식
+        if (this.scene.data.get('isActionBtnPressed')) {
+            triggerAction = true;
+        }
+        
+        // 게임패드 버튼 입력 (A 버튼: buttons[0])
+        if (this.connectedGamepad && !this.connectedGamepad.disconnected) {
+            const aButton = this.connectedGamepad.buttons[0];
+            if (aButton && aButton.pressed) {
+                if (!this.gamepadButtonState.aButton) {
+                    triggerAction = true;
+                    this.gamepadButtonState.aButton = true;
+                }
+            } else {
+                this.gamepadButtonState.aButton = false;
+            }
         }
 
         if (triggerAction) {
