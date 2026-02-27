@@ -7,8 +7,6 @@ export default class PlayerManager {
         this.player = null;
         this.lastStaminaUseTime = 0;
         this.wallCollider = null;
-        this.gamepadButtonState = {}; // 게임패드 버튼 상태 추적
-        this.connectedGamepad = null; // 연결된 게임패드
     }
 
     createPlayer(map, wallLayer, blockLayer) {
@@ -65,20 +63,13 @@ export default class PlayerManager {
     _setupInputs() {
         this.scene.data.set('cursors', this.scene.input.keyboard.createCursorKeys());
         this.scene.data.set('spaceKey', this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE));
+        
+        // 게임패드가 블루투스 키보드로 인식될 때 추가 버튼 매핑
+        // 8BitDo Micro gamepad의 버튼들을 키보드 키로 감지
+        this.scene.data.set('gamepadActionKey', this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z)); // A 버튼
+        this.scene.data.set('gamepadAltActionKey', this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X)); // B 버튼
+        
         this.scene.input.addPointer(2);
-
-        // 게임패드 초기화
-        if (this.scene.input.gamepad) {
-            this.scene.input.gamepad.on('connected', (pad) => {
-                console.log('게임패드 연결됨:', pad.id);
-                this.connectedGamepad = pad;
-            });
-            this.scene.input.gamepad.on('disconnected', () => {
-                console.log('게임패드 연결 해제됨');
-                this.connectedGamepad = null;
-                this.gamepadButtonState = {};
-            });
-        }
 
         if (this.scene.data.get('isMobile')) {
             const joyX = this.scene.cameras.main.width - 120;
@@ -172,20 +163,6 @@ export default class PlayerManager {
                 }
             }
 
-            // 게임패드 아날로그 스틱 입력
-            if (this.connectedGamepad && !this.connectedGamepad.disconnected) {
-                const padMoveX = this.connectedGamepad.axes[0]?.getValue() || 0; // 왼쪽 스틱 X
-                const padMoveY = this.connectedGamepad.axes[1]?.getValue() || 0; // 왼쪽 스틱 Y
-                const deadzone = 0.3;
-                
-                if (Math.abs(padMoveX) > deadzone || Math.abs(padMoveY) > deadzone) {
-                    if (moveX === 0 && moveY === 0) {
-                        moveX = padMoveX;
-                        moveY = padMoveY;
-                    }
-                }
-            }
-
             if (moveX !== 0 || moveY !== 0) {
                 const len = Math.sqrt(moveX * moveX + moveY * moveY);
                 if (len > 1) {
@@ -207,9 +184,21 @@ export default class PlayerManager {
     _handleAction() {
         let triggerAction = false;
         const spaceKey = this.scene.data.get('spaceKey');
+        const gamepadActionKey = this.scene.data.get('gamepadActionKey'); // Z 키 (게임패드 A 버튼)
+        const gamepadAltActionKey = this.scene.data.get('gamepadAltActionKey'); // X 키 (게임패드 B 버튼)
         
-        // 키보드 입력
+        // 키보드 / Space 입력
         if (Phaser.Input.Keyboard.JustDown(spaceKey)) {
+            triggerAction = true;
+        }
+        
+        // 게임패드 A 버튼 (Z 키)
+        if (Phaser.Input.Keyboard.JustDown(gamepadActionKey)) {
+            triggerAction = true;
+        }
+        
+        // 게임패드 B 버튼 (X 키)
+        if (Phaser.Input.Keyboard.JustDown(gamepadAltActionKey)) {
             triggerAction = true;
         }
         
@@ -222,19 +211,6 @@ export default class PlayerManager {
         // 다른 입력 방식
         if (this.scene.data.get('isActionBtnPressed')) {
             triggerAction = true;
-        }
-        
-        // 게임패드 버튼 입력 (A 버튼: buttons[0])
-        if (this.connectedGamepad && !this.connectedGamepad.disconnected) {
-            const aButton = this.connectedGamepad.buttons[0];
-            if (aButton && aButton.pressed) {
-                if (!this.gamepadButtonState.aButton) {
-                    triggerAction = true;
-                    this.gamepadButtonState.aButton = true;
-                }
-            } else {
-                this.gamepadButtonState.aButton = false;
-            }
         }
 
         if (triggerAction) {
