@@ -61,8 +61,21 @@ export default class PlayerManager {
     }
 
     _setupInputs() {
-        this.scene.data.set('cursors', this.scene.input.keyboard.createCursorKeys());
-        this.scene.data.set('spaceKey', this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE));
+        // 8BitDo 컨트롤러 키 매핑
+        const keyLeft = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+        const keyRight = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F);
+        const keyUp = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C);
+        const keyDown = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+        
+        this.scene.data.set('cursors', {
+            left: keyLeft,
+            right: keyRight,
+            up: keyUp,
+            down: keyDown
+        });
+        
+        // G 키를 스페이스 대신으로 설정
+        this.scene.data.set('spaceKey', this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.G));
         
         // 게임패드가 블루투스 키보드로 인식될 때 추가 버튼 매핑
         // 8BitDo Micro gamepad의 버튼들을 키보드 키로 감지
